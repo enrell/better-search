@@ -1,0 +1,26 @@
+name: searxng-web-fetch-mcp
+version: 0.1.0
+
+authors:
+  - enrell <enrellsa10@proton.me>
+
+targets:
+  searxng-web-fetch-mcp:
+    main: src/searxng_web_fetch_mcp.cr
+
+crystal: '>= 1.19.1'
+
+license: MIT
+
+dependencies:
+  mcp:
+    github: ralsina/mcp
+    version: 0.1.1
+  connect-proxy:
+    github: spider-gazelle/connect-proxy
+  lexbor:
+    github: kostya/lexbor
+
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba

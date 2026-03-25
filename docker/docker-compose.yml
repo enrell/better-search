@@ -1,0 +1,16 @@
+services:
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: searxng-web-fetch-mcp
+    ports:
+      - "8000:8000"
+    environment:
+      # Connect to external services running on host
+      - BYPARR_URL=http://host.docker.internal:8191
+      - SEARXNG_URL=http://host.docker.internal:8888
+      - LOG_LEVEL=info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
