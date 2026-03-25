@@ -2,7 +2,7 @@ require "./spec_helper"
 
 describe SearxngWebFetchMcp do
   it "has a version" do
-    SearxngWebFetchMcp::VERSION.should eq("0.1.1")
+    SearxngWebFetchMcp::VERSION.should eq("0.1.2")
   end
 
   it "should log correctly" do
