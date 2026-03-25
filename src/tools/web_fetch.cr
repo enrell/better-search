@@ -33,21 +33,32 @@ class WebFetch < MCP::AbstractTool
 
   private def fetch_and_extract(url : String, include_metadata : Bool)
     html = fetch_html(url)
-    return {
-      "success" => false,
-      "error"   => "Failed to fetch URL",
-      "url"     => url,
-    } if html.empty?
+    if html.empty?
+      res_err = {
+        "success" => false,
+        "error"   => "Failed to fetch URL",
+        "url"     => url,
+      }
+      return Hash(String, JSON::Any).new.tap do |h|
+        h["content"] = JSON::Any.new([
+          JSON::Any.new({
+            "type" => JSON::Any.new("text"),
+            "text" => JSON::Any.new(res_err.to_json)
+          } of String => JSON::Any)
+        ])
+        h["isError"] = JSON::Any.new(true)
+      end
+    end
 
     extractor = Extraction::TrafilaturaExtractor.new
     result = extractor.extract(html)
 
     markdown = Utils::HtmlToMarkdown.convert(result.text)
 
-    response = Hash(String, JSON::Any).new
-    response["success"] = JSON::Any.new(true)
-    response["url"] = JSON::Any.new(url)
-    response["content"] = JSON::Any.new(markdown)
+    res = Hash(String, JSON::Any).new
+    res["success"] = JSON::Any.new(true)
+    res["url"] = JSON::Any.new(url)
+    res["text"] = JSON::Any.new(markdown)
 
     if include_metadata
       metadata = Hash(String, JSON::Any).new
@@ -56,16 +67,34 @@ class WebFetch < MCP::AbstractTool
       metadata["date"] = JSON::Any.new(result.date)
       metadata["language"] = JSON::Any.new(result.language)
       metadata["url"] = JSON::Any.new(result.url)
-      response["metadata"] = JSON::Any.new(metadata)
+      res["metadata"] = JSON::Any.new(metadata)
     end
 
+    response = Hash(String, JSON::Any).new
+    response["content"] = JSON::Any.new([
+      JSON::Any.new({
+        "type" => JSON::Any.new("text"),
+        "text" => JSON::Any.new(res.to_json)
+      } of String => JSON::Any)
+    ])
+    response["isError"] = JSON::Any.new(false)
     response
   rescue ex : Exception
-    {
+    res = {
       "success" => false,
       "error"   => ex.message || "Unknown error",
       "url"     => url,
     }
+    
+    Hash(String, JSON::Any).new.tap do |h|
+      h["content"] = JSON::Any.new([
+        JSON::Any.new({
+          "type" => JSON::Any.new("text"),
+          "text" => JSON::Any.new(res.to_json)
+        } of String => JSON::Any)
+      ])
+      h["isError"] = JSON::Any.new(true)
+    end
   end
 
   private def fetch_html(url : String) : String

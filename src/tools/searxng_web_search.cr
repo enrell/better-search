@@ -32,7 +32,17 @@ class SearxngWebSearch < MCP::AbstractTool
     num_results = params["num_results"]?.try(&.as_i) || 10
     language = params["language"]?.try(&.as_s) || "en"
 
-    search_results(query, num_results, language)
+    res = search_results(query, num_results, language)
+    
+    Hash(String, JSON::Any).new.tap do |h|
+      h["content"] = JSON::Any.new([
+        JSON::Any.new({
+          "type" => JSON::Any.new("text"),
+          "text" => JSON::Any.new(res.to_json)
+        } of String => JSON::Any)
+      ])
+      h["isError"] = JSON::Any.new(res["success"] == false)
+    end
   end
 
   private def search_results(query : String, num_results : Int, language : String)
@@ -56,7 +66,7 @@ class SearxngWebSearch < MCP::AbstractTool
       return {
         "success" => false,
         "error"   => "SearXNG returned status #{response.status_code}",
-        "results" => [] of String,
+        "results" => [] of Hash(String, String),
       }
     end
 
@@ -70,12 +80,14 @@ class SearxngWebSearch < MCP::AbstractTool
     {
       "success" => false,
       "error"   => ex.message || "Unknown error",
-      "results" => [] of String,
+      "results" => [] of Hash(String, String),
     }
   end
 
   private def create_proxy_client
-    ConnectProxy::HTTPClient.new(SEARXNG_URL)
+    # Connect directly to our SearXNG instance without sending the traffic through Byparr proxy
+    uri = URI.parse(SEARXNG_URL)
+    HTTP::Client.new(uri)
   end
 
   private def parse_search_results(body : String)

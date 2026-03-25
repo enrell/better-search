@@ -50,9 +50,11 @@ module Extraction
     private def extract_title(doc : Lexbor::Parser) : String
       title = ""
 
-      doc.nodes("meta[property=og:title]").each do |meta|
-        title = meta["content"]? || ""
-        break if title
+      doc.nodes("meta").each do |meta|
+        if meta["property"]? == "og:title"
+          title = meta["content"]? || ""
+          break unless title.empty?
+        end
       end
 
       if title.empty?
@@ -71,13 +73,16 @@ module Extraction
     private def extract_author(doc : Lexbor::Parser) : String
       author = ""
 
-      doc.nodes("meta[name=author]").each do |meta|
-        author = meta["content"]? || ""
-        break if author
+      doc.nodes("meta").each do |meta|
+        if meta["name"]? == "author"
+          author = meta["content"]? || ""
+          break unless author.empty?
+        end
       end
 
       if author.empty?
-        author = doc.nodes("author").first?.try(&.inner_text) || ""
+        author_node = doc.nodes("a").find { |n| n["rel"]? == "author" }
+        author = author_node.try(&.inner_text) || ""
       end
 
       author.strip
@@ -86,9 +91,11 @@ module Extraction
     private def extract_date(doc : Lexbor::Parser) : String
       date = ""
 
-      doc.nodes("meta[property=article:published_time]").each do |meta|
-        date = meta["content"]? || ""
-        break if date
+      doc.nodes("meta").each do |meta|
+        if meta["property"]? == "article:published_time"
+          date = meta["content"]? || ""
+          break unless date.empty?
+        end
       end
 
       if date.empty?
@@ -118,13 +125,15 @@ module Extraction
     private def extract_url(doc : Lexbor::Parser) : String
       url = ""
 
-      doc.nodes("meta[property=og:url]").each do |meta|
-        url = meta["content"]? || ""
-        break if url
+      doc.nodes("meta").each do |meta|
+        if meta["property"]? == "og:url"
+          url = meta["content"]? || ""
+          break unless url.empty?
+        end
       end
 
       if url.empty?
-        link = doc.nodes("link[rel=canonical]").first?
+        link = doc.nodes("link").find { |l| l["rel"]? == "canonical" }
         url = link["href"]? || "" if link
       end
 
@@ -145,9 +154,11 @@ module Extraction
 
       add_candidate_if_present(doc.nodes("article").first?, candidates)
       add_candidate_if_present(doc.nodes("main").first?, candidates)
-      add_candidate_if_present(doc.nodes("[role=main]").first?, candidates)
 
       doc.nodes("div").each do |div|
+        if div["role"]? == "main"
+          add_candidate_if_present(div, candidates)
+        end
         score = div_candidate_score(div)
         next if score.nil?
         candidates << {node: div, score: score}
