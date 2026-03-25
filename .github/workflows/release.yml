@@ -1,0 +1,51 @@
+name: Build and Release Binaries
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal_version: 1.20.0
+
+      - name: Build for Linux
+        run: |
+          shards install --without development
+          crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-x86_64 --release --static
+          tar czf searxng-web-fetch-mcp-linux-x86_64.tar.gz searxng-web-fetch-mcp-linux-x86_64
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: searxng-web-fetch-mcp-linux-x86_64.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Crystal
+        run: |
+          brew install crystal
+
+      - name: Build for macOS
+        run: |
+          shards install --without development
+          ARCH=$(uname -m)
+          crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-darwin-${ARCH} --release
+          tar czf searxng-web-fetch-mcp-darwin-${ARCH}.tar.gz searxng-web-fetch-mcp-darwin-${ARCH}
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: searxng-web-fetch-mcp-darwin-*.tar.gz

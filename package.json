@@ -1,0 +1,33 @@
+{
+  "name": "searxng-web-fetch-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for web search and content extraction via SearXNG and Byparr",
+  "keywords": [
+    "mcp",
+    "searxng",
+    "web-search",
+    "claude",
+    "llm",
+    "mcp-server"
+  ],
+  "homepage": "https://github.com/enrell/searxng-web-fetch-mcp",
+  "bin": {
+    "searxng-web-fetch-mcp": "./npm/bin/searxng-web-fetch-mcp"
+  },
+  "scripts": {
+    "postinstall": "node npm/install.js"
+  },
+  "files": [
+    "npm/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enrell/searxng-web-fetch-mcp.git"
+  }
+}
