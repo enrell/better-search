@@ -6,7 +6,7 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
-const binaryPath = path.join(__dirname, 'searxng-web-fetch-mcp' + (process.platform === 'win32' ? '.exe' : ''));
+const binaryPath = path.join(__dirname, '..' , 'native', 'searxng-web-fetch-mcp' + (process.platform === 'win32' ? '.exe' : ''));
 
 const child = spawn(binaryPath, process.argv.slice(2), {
   stdio: 'inherit',

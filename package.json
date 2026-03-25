@@ -12,7 +12,7 @@
   ],
   "homepage": "https://github.com/enrell/searxng-web-fetch-mcp",
   "bin": {
-    "searxng-web-fetch-mcp": "./npm/bin/searxng-web-fetch-mcp"
+    "searxng-web-fetch-mcp": "./npm/bin/run.js"
   },
   "scripts": {
     "postinstall": "node npm/install.js"

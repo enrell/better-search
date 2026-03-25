@@ -17,8 +17,8 @@ const platformMap = {
   'win32': 'windows-x86_64',
 };
 
-const binDir = path.join(__dirname, 'bin');
-const binPath = path.join(binDir, BINARY_NAME);
+const nativeDir = path.join(__dirname, 'native');
+const binPath = path.join(nativeDir, BINARY_NAME);
 
 function getPlatform() {
   const platform = process.platform;
@@ -69,7 +69,7 @@ function handleResponse(response, resolve, reject) {
   response.on('data', (chunk) => chunks.push(chunk));
   response.on('end', () => {
     const buffer = Buffer.concat(chunks);
-    fs.mkdirSync(binDir, { recursive: true });
+    fs.mkdirSync(nativeDir, { recursive: true });
     fs.writeFileSync(binPath, buffer);
     fs.chmodSync(binPath, 0o755);
     console.log(`Binary installed to: ${binPath}`);
