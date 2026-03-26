@@ -35,13 +35,13 @@ class SearxngWebSearch < MCP::AbstractTool
     res = search_results(query, num_results, language)
 
     Hash(String, JSON::Any).new.tap do |_hash|
-      h["content"] = JSON::Any.new([
+      _hash["content"] = JSON::Any.new([
         JSON::Any.new({
           "type" => JSON::Any.new("text"),
           "text" => JSON::Any.new(res.to_json),
         } of String => JSON::Any),
       ])
-      h["isError"] = JSON::Any.new(res["success"] == false)
+      _hash["isError"] = JSON::Any.new(res["success"] == false)
     end
   end
 

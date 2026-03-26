@@ -40,13 +40,13 @@ class WebFetch < MCP::AbstractTool
         "url"     => url,
       }
       return Hash(String, JSON::Any).new.tap do |_hash|
-        h["content"] = JSON::Any.new([
+        _hash["content"] = JSON::Any.new([
           JSON::Any.new({
             "type" => JSON::Any.new("text"),
             "text" => JSON::Any.new(res_err.to_json),
           } of String => JSON::Any),
         ])
-        h["isError"] = JSON::Any.new(true)
+        _hash["isError"] = JSON::Any.new(true)
       end
     end
 
@@ -87,13 +87,13 @@ class WebFetch < MCP::AbstractTool
     }
 
     Hash(String, JSON::Any).new.tap do |_hash|
-      h["content"] = JSON::Any.new([
+      _hash["content"] = JSON::Any.new([
         JSON::Any.new({
           "type" => JSON::Any.new("text"),
           "text" => JSON::Any.new(res.to_json),
         } of String => JSON::Any),
       ])
-      h["isError"] = JSON::Any.new(true)
+      _hash["isError"] = JSON::Any.new(true)
     end
   end
 
