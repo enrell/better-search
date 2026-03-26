@@ -49,7 +49,7 @@ test_search() {
     echo "Test: Search"
     RESPONSE=$(echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"searxng_web_search","arguments":{"query":"crystal programming","num_results":3}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null)
     
-    if echo "$RESPONSE" | grep -q '"success":true'; then
+    if echo "$RESPONSE" | grep -q '\\"success\\":true'; then
         echo "  PASS: Search"
         return 0
     else
@@ -63,7 +63,7 @@ test_web_fetch() {
     echo "Test: Web Fetch"
     RESPONSE=$(echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"web_fetch","arguments":{"url":"https://example.com/"}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null)
     
-    if echo "$RESPONSE" | grep -q '"success":true'; then
+    if echo "$RESPONSE" | grep -q '\\"success\\":true'; then
         echo "  PASS: Web Fetch"
         return 0
     else
@@ -76,22 +76,33 @@ test_web_fetch() {
 test_concurrent_requests() {
     echo "Test: Concurrent Requests"
     
-    RESPONSE1=$(echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"searxng_web_search","arguments":{"query":"test1","num_results":1}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null) &
+    (
+        RESPONSE=$(echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"searxng_web_search","arguments":{"query":"test1","num_results":1}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null)
+        echo "$RESPONSE" > /tmp/mcp_test_1.txt
+    ) &
     PID1=$!
     
-    RESPONSE2=$(echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"searxng_web_search","arguments":{"query":"test2","num_results":1}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null) &
+    (
+        RESPONSE=$(echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"searxng_web_search","arguments":{"query":"test2","num_results":1}}}' | SEARXNG_URL="$SEARXNG_URL" BYPARR_URL="$BYPARR_URL" "$MCP_BINARY" 2>/dev/null)
+        echo "$RESPONSE" > /tmp/mcp_test_2.txt
+    ) &
     PID2=$!
     
     wait $PID1
     wait $PID2
     
-    if echo "$RESPONSE1" | grep -q '"success"' && echo "$RESPONSE2" | grep -q '"success"'; then
+    RESPONSE1=$(cat /tmp/mcp_test_1.txt 2>/dev/null || echo "")
+    RESPONSE2=$(cat /tmp/mcp_test_2.txt 2>/dev/null || echo "")
+    
+    if echo "$RESPONSE1" | grep -q '\\"success\\"' && echo "$RESPONSE2" | grep -q '\\"success\\"'; then
         echo "  PASS: Concurrent Requests"
+        rm -f /tmp/mcp_test_1.txt /tmp/mcp_test_2.txt
         return 0
     else
         echo "  FAIL: Concurrent Requests"
         echo "  Response1: $RESPONSE1"
         echo "  Response2: $RESPONSE2"
+        rm -f /tmp/mcp_test_1.txt /tmp/mcp_test_2.txt
         return 1
     fi
 }
