@@ -5,11 +5,11 @@ require "./extraction/*"
 require "./utils/*"
 
 module SearxngWebFetchMcp
-  VERSION = "0.1.6"
+  VERSION = "0.2.1"
 
-  LOG_LEVEL                = ENV.fetch("LOG_LEVEL", "INFO").upcase
-  MCP_TIMEOUT              = ENV.fetch("MCP_TIMEOUT", "30").to_i
-  MAX_CONCURRENT_REQUESTS  = ENV.fetch("MAX_CONCURRENT_REQUESTS", "30").to_i
+  LOG_LEVEL               = ENV.fetch("LOG_LEVEL", "INFO").upcase
+  MCP_TIMEOUT             = ENV.fetch("MCP_TIMEOUT", "30").to_i
+  MAX_CONCURRENT_REQUESTS = ENV.fetch("MAX_CONCURRENT_REQUESTS", "30").to_i
 
   def self.log(level, message)
     STDERR.puts "[#{level}] #{message}" if should_log?(level)

@@ -4,16 +4,22 @@ require "http/client"
 require "connect-proxy"
 require "../extraction/trafilatura_extractor"
 require "../utils/html_to_markdown"
+require "../utils/concurrent_http"
 
 class WebFetch < MCP::AbstractTool
   @@tool_name = "web_fetch"
-  @@tool_description = "Fetch a web page and extract its main content as clean Markdown. Uses Byparr proxy for fetching and trafilatura-style extraction."
+  @@tool_description = "Fetch one or more web pages and extract their main content as clean Markdown. Supports parallel batch fetching for multiple URLs."
   @@tool_input_schema = {
     "type"       => "object",
     "properties" => {
       "url" => {
         "type"        => "string",
-        "description" => "The URL to fetch",
+        "description" => "The URL to fetch (use 'urls' for batch fetching)",
+      },
+      "urls" => {
+        "type"        => "array",
+        "items"       => {"type" => "string"},
+        "description" => "Array of URLs to fetch in parallel (faster than sequential)",
       },
       "include_metadata" => {
         "type"        => "boolean",
@@ -21,14 +27,74 @@ class WebFetch < MCP::AbstractTool
         "default"     => true,
       },
     },
-    "required" => ["url"],
+    "oneOf" => [
+      {"required" => ["url"]},
+      {"required" => ["urls"]},
+    ],
   }.to_json
 
   def invoke(params : Hash(String, JSON::Any), env : HTTP::Server::Context? = nil)
-    url = params["url"].as_s
     include_metadata = params["include_metadata"]?.try(&.as_bool) || true
 
-    fetch_and_extract(url, include_metadata)
+    if urls = params["urls"]?.try(&.as_a)
+      fetch_batch(urls.map(&.as_s), include_metadata)
+    elsif url = params["url"]?
+      fetch_and_extract(url.as_s, include_metadata)
+    else
+      error_hash = Hash(String, JSON::Any).new
+      error_hash["success"] = JSON::Any.new(false)
+      error_hash["error"] = JSON::Any.new("Either 'url' or 'urls' parameter is required")
+      format_mcp_response(error_hash, true)
+    end
+  end
+
+  private def format_mcp_response(data : Hash(String, JSON::Any), is_error : Bool)
+    Hash(String, JSON::Any).new.tap do |_hash|
+      _hash["content"] = JSON::Any.new([
+        JSON::Any.new({
+          "type" => JSON::Any.new("text"),
+          "text" => JSON::Any.new(data.to_json),
+        } of String => JSON::Any),
+      ])
+      _hash["isError"] = JSON::Any.new(is_error)
+    end
+  end
+
+  private def fetch_batch(urls : Array(String), include_metadata : Bool)
+    max_concurrent = SearxngWebFetchMcp::MAX_CONCURRENT_REQUESTS
+
+    results = Utils::ConcurrentHTTP.run_parallel(max_concurrent, urls.map do |url|
+      -> { fetch_single_result(url, include_metadata) }
+    end)
+
+    response = Hash(String, JSON::Any).new
+    response["success"] = JSON::Any.new(true)
+    response["count"] = JSON::Any.new(results.size)
+    response["results"] = JSON::Any.new(results)
+
+    format_mcp_response(response, false)
+  rescue ex : Exception
+    error_hash = Hash(String, JSON::Any).new
+    error_hash["success"] = JSON::Any.new(false)
+    error_hash["error"] = JSON::Any.new(ex.message || "Batch fetch failed")
+    format_mcp_response(error_hash, true)
+  end
+
+  private def fetch_single_result(url : String, include_metadata : Bool) : JSON::Any
+    result = fetch_and_extract(url, include_metadata)
+    if result["isError"]?.try(&.as_bool)
+      JSON::Any.new(Hash(String, JSON::Any).new.tap do |_hash|
+        _hash["success"] = JSON::Any.new(false)
+        _hash["url"] = JSON::Any.new(url)
+        _hash["error"] = JSON::Any.new(result.dig("content", 0, "text").as_s)
+      end)
+    else
+      JSON::Any.new(Hash(String, JSON::Any).new.tap do |_hash|
+        _hash["success"] = JSON::Any.new(true)
+        _hash["url"] = JSON::Any.new(url)
+        _hash["text"] = JSON::Any.new(result.dig("content", 0, "text").as_s)
+      end)
+    end
   end
 
   private def fetch_and_extract(url : String, include_metadata : Bool)
