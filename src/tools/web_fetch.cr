@@ -99,27 +99,47 @@ class WebFetch < MCP::AbstractTool
 
   private def fetch_html(url : String) : String
     target_uri = URI.parse(url)
-    client = ConnectProxy::HTTPClient.new(target_uri)
-    client.connect_timeout = 30.seconds
-    client.read_timeout = 30.seconds
+    
+    begin
+      # Create TLS context that skips verification (needed for some environments)
+      tls = OpenSSL::SSL::Context::Client.new
+      tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+      
+      client = HTTP::Client.new(target_uri, tls: tls)
+      client.connect_timeout = 15.seconds
+      client.read_timeout = 15.seconds
 
-    request = HTTP::Request.new("GET", url)
-    request.headers["User-Agent"] = "Mozilla/5.0 (compatible; MCP-Bot/1.0)"
-    request.headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      request = HTTP::Request.new("GET", url)
+      request.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      request.headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      request.headers["Accept-Language"] = "en-US,en;q=0.9"
 
-    response = client.exec(request)
+      response = client.exec(request)
 
-    if response.status_code >= 300 && response.status_code < 400
-      location = response.headers["Location"]?
-      if location
-        return fetch_html(location)
+      if response.status_code >= 300 && response.status_code < 400
+        location = response.headers["Location"]?
+        if location
+          # Prevent infinite redirects
+          if location == url
+            raise "Redirect loop detected"
+          end
+          # Build absolute URL if relative
+          redirect_url = location.starts_with?("http") ? location : URI.parse(url).resolve(location).to_s
+          return fetch_html(redirect_url)
+        end
       end
-    end
 
-    if response.status_code != 200
-      raise "HTTP error: #{response.status_code}"
-    end
+      if response.status_code != 200
+        raise "HTTP error: #{response.status_code}"
+      end
 
-    response.body
+      response.body
+    rescue ex : IO::TimeoutError
+      SearxngWebFetchMcp.log("ERROR", "Timeout fetching #{url}: #{ex.message}")
+      raise Exception.new("Request timeout after 15 seconds")
+    rescue ex : Exception
+      SearxngWebFetchMcp.log("ERROR", "Failed to fetch #{url}: #{ex.message}")
+      raise ex
+    end
   end
 end
