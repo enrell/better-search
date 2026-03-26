@@ -56,16 +56,13 @@ searxng-web-fetch-mcp/
 │   │   ├── searxng_web_search.cr     # Tool 1: Search
 │   │   └── web_fetch.cr              # Tool 2: Fetch + Extract
 │   ├── extraction/
-│   │   └── trafilatura_extractor.cr  # Ported extraction core (consolidated)
+│   │   └── trafilatura_extractor.cr  # Ported extraction core
 │   └── utils/
 │       └── html_to_markdown.cr       # HTML→Markdown converter
-├── docker/
-│   ├── Dockerfile                     # Multi-stage production build
-│   └── docker-compose.yml             # Full stack orchestration
-├── spec/
-├── .gitignore
+├── install.sh                        # Install script for users
+├── README.md                         # User documentation
 ├── shard.yml
-└── README.md
+└── .gitignore
 ```
 
 ---
