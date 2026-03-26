@@ -39,12 +39,12 @@ class WebFetch < MCP::AbstractTool
         "error"   => "Failed to fetch URL",
         "url"     => url,
       }
-      return Hash(String, JSON::Any).new.tap do |h|
+      return Hash(String, JSON::Any).new.tap do |_hash|
         h["content"] = JSON::Any.new([
           JSON::Any.new({
             "type" => JSON::Any.new("text"),
-            "text" => JSON::Any.new(res_err.to_json)
-          } of String => JSON::Any)
+            "text" => JSON::Any.new(res_err.to_json),
+          } of String => JSON::Any),
         ])
         h["isError"] = JSON::Any.new(true)
       end
@@ -74,8 +74,8 @@ class WebFetch < MCP::AbstractTool
     response["content"] = JSON::Any.new([
       JSON::Any.new({
         "type" => JSON::Any.new("text"),
-        "text" => JSON::Any.new(res.to_json)
-      } of String => JSON::Any)
+        "text" => JSON::Any.new(res.to_json),
+      } of String => JSON::Any),
     ])
     response["isError"] = JSON::Any.new(false)
     response
@@ -85,13 +85,13 @@ class WebFetch < MCP::AbstractTool
       "error"   => ex.message || "Unknown error",
       "url"     => url,
     }
-    
-    Hash(String, JSON::Any).new.tap do |h|
+
+    Hash(String, JSON::Any).new.tap do |_hash|
       h["content"] = JSON::Any.new([
         JSON::Any.new({
           "type" => JSON::Any.new("text"),
-          "text" => JSON::Any.new(res.to_json)
-        } of String => JSON::Any)
+          "text" => JSON::Any.new(res.to_json),
+        } of String => JSON::Any),
       ])
       h["isError"] = JSON::Any.new(true)
     end
@@ -99,17 +99,17 @@ class WebFetch < MCP::AbstractTool
 
   private def fetch_html(url : String) : String
     target_uri = URI.parse(url)
-    
+
     begin
       # Create client - use TLS for HTTPS, disable verification for some environments
       client = if target_uri.scheme == "https"
-        tls = OpenSSL::SSL::Context::Client.new
-        tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
-        HTTP::Client.new(target_uri, tls: tls)
-      else
-        HTTP::Client.new(target_uri)
-      end
-      
+                 tls = OpenSSL::SSL::Context::Client.new
+                 tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+                 HTTP::Client.new(target_uri, tls: tls)
+               else
+                 HTTP::Client.new(target_uri)
+               end
+
       client.connect_timeout = 15.seconds
       client.read_timeout = 15.seconds
 

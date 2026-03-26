@@ -81,7 +81,7 @@ module Extraction
       end
 
       if author.empty?
-        author_node = doc.nodes("a").find { |n| n["rel"]? == "author" }
+        author_node = doc.nodes("a").find { |node| node["rel"]? == "author" }
         author = author_node.try(&.inner_text) || ""
       end
 
@@ -133,7 +133,7 @@ module Extraction
       end
 
       if url.empty?
-        link = doc.nodes("link").find { |l| l["rel"]? == "canonical" }
+        link = doc.nodes("link").find { |link_node| link_node["rel"]? == "canonical" }
         url = link["href"]? || "" if link
       end
 
