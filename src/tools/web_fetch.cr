@@ -101,11 +101,15 @@ class WebFetch < MCP::AbstractTool
     target_uri = URI.parse(url)
     
     begin
-      # Create TLS context that skips verification (needed for some environments)
-      tls = OpenSSL::SSL::Context::Client.new
-      tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+      # Create client - use TLS for HTTPS, disable verification for some environments
+      client = if target_uri.scheme == "https"
+        tls = OpenSSL::SSL::Context::Client.new
+        tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+        HTTP::Client.new(target_uri, tls: tls)
+      else
+        HTTP::Client.new(target_uri)
+      end
       
-      client = HTTP::Client.new(target_uri, tls: tls)
       client.connect_timeout = 15.seconds
       client.read_timeout = 15.seconds
 
