@@ -34,7 +34,7 @@ Add to your MCP configuration file:
   "mcp": {
     "searxng-web": {
       "type": "local",
-      "command": ["~/.local/bin/searxng-web-fetch-mcp"],
+      "command": ["/home/YOUR_USER/.local/bin/searxng-web-fetch-mcp"],
       "environment": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191"
@@ -49,7 +49,7 @@ Add to your MCP configuration file:
 {
   "mcpServers": {
     "searxng-web": {
-      "command": "~/.local/bin/searxng-web-fetch-mcp",
+      "command": "/home/YOUR_USER/.local/bin/searxng-web-fetch-mcp",
       "env": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191"
@@ -58,6 +58,8 @@ Add to your MCP configuration file:
   }
 }
 ```
+
+> **Note:** Replace `/home/YOUR_USER` with your actual home directory path (e.g., `/home/kokoro` or use `$HOME` environment variable).
 
 ## Install Script
 
