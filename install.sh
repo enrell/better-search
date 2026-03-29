@@ -90,7 +90,9 @@ case "${OS}" in
 esac
 
 echo "Downloading searxng-web-fetch-mcp for ${PLATFORM}..."
-curl -sL "https://github.com/${REPO}/releases/latest/download/searxng-web-fetch-mcp-${PLATFORM}" -o "${INSTALL_PATH}"
+TEMP_PATH="${INSTALL_PATH}.tmp"
+curl -fSL "https://github.com/${REPO}/releases/latest/download/searxng-web-fetch-mcp-${PLATFORM}" -o "${TEMP_PATH}"
+mv "${TEMP_PATH}" "${INSTALL_PATH}"
 chmod +x "${INSTALL_PATH}"
 
 echo "Installed to: ${INSTALL_PATH}"
