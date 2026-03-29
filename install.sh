@@ -91,10 +91,10 @@ esac
 
 echo "Downloading searxng-web-fetch-mcp for ${PLATFORM}..."
 TEMP_PATH="${INSTALL_PATH}.tmp"
-curl -L "https://github.com/${REPO}/releases/latest/download/searxng-web-fetch-mcp-${PLATFORM}" \
+curl -L --max-time 120 "https://github.com/${REPO}/releases/latest/download/searxng-web-fetch-mcp-${PLATFORM}" \
     -H "User-Agent: searxng-web-fetch-mcp-install" \
     -o "${TEMP_PATH}" || {
-    echo "Download failed!"
+    echo "Download failed! (timeout or network error)"
     rm -f "${TEMP_PATH}"
     exit 1
 }
