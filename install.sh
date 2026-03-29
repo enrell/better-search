@@ -21,21 +21,10 @@ get_latest_version() {
     curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+' || echo ""
 }
 
-if [ -f "${INSTALL_PATH}" ] && [ "${FORCE_UPDATE}" != "true" ]; then
-    current=$(get_current_version)
-    latest=$(get_latest_version)
-    
-    if [ -n "${latest}" ] && [ "${current}" != "${latest}" ]; then
-        echo "Current version: ${current:-none}"
-        echo "Latest version:  ${latest}"
-        echo "Update available! Downloading..."
-    elif [ "${current}" = "${latest}" ]; then
-        echo "Already on latest version: ${latest}"
-        exit 0
-    else
-        echo "Could not determine version. Proceeding with install..."
-    fi
-fi
+get_download_url() {
+    local platform=$1
+    curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep "${platform}" || echo ""
+}
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -89,11 +78,33 @@ case "${OS}" in
     ;;
 esac
 
+if [ -f "${INSTALL_PATH}" ] && [ "${FORCE_UPDATE}" != "true" ]; then
+    current=$(get_current_version)
+    latest=$(get_latest_version)
+    
+    if [ -n "${latest}" ] && [ "${current}" != "${latest}" ]; then
+        echo "Current version: ${current:-none}"
+        echo "Latest version:  ${latest}"
+        echo "Update available! Downloading..."
+    elif [ "${current}" = "${latest}" ]; then
+        echo "Already on latest version: ${latest}"
+        exit 0
+    else
+        echo "Could not determine version. Proceeding with install..."
+    fi
+fi
+
 echo "Downloading searxng-web-fetch-mcp for ${PLATFORM}..."
+
+DOWNLOAD_URL=$(get_download_url "${PLATFORM}")
+
+if [ -z "${DOWNLOAD_URL}" ]; then
+    echo "Error: Could not find download URL for platform ${PLATFORM}"
+    exit 1
+fi
+
 TEMP_PATH="${INSTALL_PATH}.tmp"
-curl -L --max-time 120 "https://github.com/${REPO}/releases/latest/download/searxng-web-fetch-mcp-${PLATFORM}" \
-    -H "User-Agent: searxng-web-fetch-mcp-install" \
-    -o "${TEMP_PATH}" || {
+curl -L --max-time 120 "${DOWNLOAD_URL}" -o "${TEMP_PATH}" || {
     echo "Download failed! (timeout or network error)"
     rm -f "${TEMP_PATH}"
     exit 1
