@@ -25,7 +25,7 @@ jobs:
     - name: Build
       run: |
         shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-x86_64 --release --static
+        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-x86_64 --release
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
@@ -42,7 +42,7 @@ jobs:
     - name: Build
       run: |
         shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-arm64 --release --static
+        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-arm64 --release
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
@@ -59,7 +59,7 @@ jobs:
     - name: Build
       run: |
         shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-riscv64 --release --static
+        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-riscv64 --release
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
