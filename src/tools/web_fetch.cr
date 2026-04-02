@@ -166,6 +166,10 @@ class WebFetch < MCP::AbstractTool
   private def fetch_html(url : String) : String
     target_uri = URI.parse(url)
 
+    # Set proxy env vars from BYPARR_URL so connect-proxy extension uses it
+    ENV["http_proxy"] = BYPARR_URL
+    ENV["https_proxy"] = BYPARR_URL
+
     begin
       # Create client - use TLS for HTTPS, disable verification for some environments
       client = if target_uri.scheme == "https"
