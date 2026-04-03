@@ -100,7 +100,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install Crystal
-      run: choco install crystal -y
+      uses: crystal-lang/install-crystal@v1
+      with:
+        crystal: 1.19.1
     - name: Build
       run: |
         shards install --without development

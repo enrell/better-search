@@ -165,10 +165,9 @@ class WebFetch < MCP::AbstractTool
 
   private def fetch_html(url : String) : String
     target_uri = URI.parse(url)
-    client = nil
+    client = create_proxy_client(target_uri)
 
     begin
-      client = create_proxy_client(target_uri)
       client.connect_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
       client.read_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
       client.write_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds

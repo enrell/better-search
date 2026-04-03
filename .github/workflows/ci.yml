@@ -15,7 +15,7 @@ jobs:
       - name: Install Crystal
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.15.1
+          crystal: 1.19.1
 
       - name: Install dependencies
         run: shards install
@@ -39,7 +39,7 @@ jobs:
       - name: Install Crystal
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.15.1
+          crystal: 1.19.1
 
       - name: Build
         run: |

@@ -47,7 +47,6 @@ class SearxngWebSearch < MCP::AbstractTool
 
   private def search_results(query : String, num_results : Int, language : String)
     uri = URI.parse(search_endpoint)
-    client = nil
     client = create_search_client(uri)
 
     query_params = HTTP::Params.build do |params|

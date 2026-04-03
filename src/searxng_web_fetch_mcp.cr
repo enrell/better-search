@@ -5,9 +5,9 @@ require "./extraction/*"
 require "./utils/*"
 
 module SearxngWebFetchMcp
-  VERSION = "0.2.6"
-  DEFAULT_SEARXNG_URL    = "http://localhost:8080"
-  DEFAULT_BYPARR_URL     = "http://localhost:8191"
+  VERSION             = "0.2.8"
+  DEFAULT_SEARXNG_URL = "http://localhost:8080"
+  DEFAULT_BYPARR_URL  = "http://localhost:8191"
 
   LOG_LEVEL               = ENV.fetch("LOG_LEVEL", "INFO").upcase
   MCP_TIMEOUT             = ENV.fetch("MCP_TIMEOUT", "30").to_i

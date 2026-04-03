@@ -3,7 +3,7 @@ require "http/server"
 require "socket"
 require "json"
 
-private def with_env(name : String, value : String?)
+private def with_env(name : String, value : String?, &)
   previous = ENV[name]?
 
   if value
@@ -151,10 +151,10 @@ describe "proxy regression" do
         context.response.print({
           "results" => [
             {
-              "title" => "Proxy-safe result",
-              "url" => "https://example.com/article",
+              "title"   => "Proxy-safe result",
+              "url"     => "https://example.com/article",
               "content" => "search snippet",
-              "engine" => "stub",
+              "engine"  => "stub",
             },
           ],
         }.to_json)
@@ -168,7 +168,7 @@ describe "proxy regression" do
       context.response.print("<html><body><article><h1>Proxy-safe article</h1><p>Body text for extraction.</p></article></body></html>")
     end
 
-    search_port = URI.parse(search_server.url).port.not_nil!
+    search_port = URI.parse(search_server.url).port || raise "Expected search test server to expose a port"
     proxy_server = TestProxyServer.new([search_port])
 
     with_test_env(search_server.url, proxy_server.url) do
