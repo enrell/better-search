@@ -46,8 +46,9 @@ class SearxngWebSearch < MCP::AbstractTool
   end
 
   private def search_results(query : String, num_results : Int, language : String)
-    uri = URI.parse("#{SEARXNG_URL}/search")
-    client = create_proxy_client
+    uri = URI.parse(search_endpoint)
+    client = nil
+    client = create_search_client(uri)
 
     query_params = HTTP::Params.build do |params|
       params.add("q", query)
@@ -59,7 +60,7 @@ class SearxngWebSearch < MCP::AbstractTool
       params.add("num_results", num_results.to_s)
     end
 
-    request = HTTP::Request.new("GET", "#{uri.path}?#{query_params}")
+    request = HTTP::Request.new("GET", request_resource(uri, query_params))
     response = client.exec(request)
 
     if response.status_code != 200
@@ -82,15 +83,38 @@ class SearxngWebSearch < MCP::AbstractTool
       "error"   => ex.message || "Unknown error",
       "results" => [] of Hash(String, String),
     }
+  ensure
+    client.try(&.close)
   end
 
-  private def create_proxy_client
-    uri = URI.parse(SEARXNG_URL)
-    client = HTTP::Client.new(uri)
+  private def search_endpoint : String
+    base_url = SearxngWebFetchMcp.searxng_url
+    base_url.ends_with?("/") ? "#{base_url}search" : "#{base_url}/search"
+  end
+
+  private def create_search_client(uri : URI)
+    client = ConnectProxy::HTTPClient.new(uri, ignore_env: true)
     client.read_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
     client.write_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
     client.connect_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
     client
+  end
+
+  private def request_resource(uri : URI, query : String? = nil) : String
+    resource = uri.path.empty? ? "/" : uri.path
+    query_parts = [] of String
+
+    if existing_query = uri.query
+      query_parts << existing_query
+    end
+
+    if query && !query.empty?
+      query_parts << query
+    end
+
+    return resource if query_parts.empty?
+
+    "#{resource}?#{query_parts.join("&")}"
   end
 
   private def parse_search_results(body : String)

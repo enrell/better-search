@@ -165,25 +165,16 @@ class WebFetch < MCP::AbstractTool
 
   private def fetch_html(url : String) : String
     target_uri = URI.parse(url)
-
-    # Set proxy env vars from BYPARR_URL so connect-proxy extension uses it
-    ENV["http_proxy"] = BYPARR_URL
-    ENV["https_proxy"] = BYPARR_URL
+    client = nil
 
     begin
-      # Create client - use TLS for HTTPS, disable verification for some environments
-      client = if target_uri.scheme == "https"
-                 tls = OpenSSL::SSL::Context::Client.new
-                 tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
-                 HTTP::Client.new(target_uri, tls: tls)
-               else
-                 HTTP::Client.new(target_uri)
-               end
-
+      client = create_proxy_client(target_uri)
       client.connect_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
       client.read_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
+      client.write_timeout = SearxngWebFetchMcp::MCP_TIMEOUT.seconds
+      client.set_proxy(build_proxy)
 
-      request = HTTP::Request.new("GET", url)
+      request = HTTP::Request.new("GET", request_resource(target_uri))
       request.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       request.headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
       request.headers["Accept-Language"] = "en-US,en;q=0.9"
@@ -214,6 +205,47 @@ class WebFetch < MCP::AbstractTool
     rescue ex : Exception
       SearxngWebFetchMcp.log("ERROR", "Failed to fetch #{url}: #{ex.message}")
       raise ex
+    ensure
+      client.try(&.close)
     end
+  end
+
+  private def create_proxy_client(target_uri : URI)
+    if target_uri.scheme == "https"
+      tls = OpenSSL::SSL::Context::Client.new
+      tls.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+      ConnectProxy::HTTPClient.new(target_uri, tls: tls, ignore_env: true)
+    else
+      ConnectProxy::HTTPClient.new(target_uri, ignore_env: true)
+    end
+  end
+
+  private def build_proxy
+    proxy_uri = URI.parse(SearxngWebFetchMcp.byparr_url)
+    proxy_host = proxy_uri.host
+    proxy_scheme = proxy_uri.scheme
+
+    raise "Invalid BYPARR_URL: missing host" unless proxy_host
+    raise "Invalid BYPARR_URL: missing scheme" unless proxy_scheme
+
+    proxy_port = proxy_uri.port || URI.default_port(proxy_scheme)
+    raise "Invalid BYPARR_URL: missing port" unless proxy_port
+
+    auth = if proxy_user = proxy_uri.user
+             {
+               username: proxy_user,
+               password: proxy_uri.password || "",
+             }
+           end
+
+    ConnectProxy.new(proxy_host, proxy_port, auth)
+  rescue ex : Exception
+    raise Exception.new("Invalid BYPARR_URL '#{SearxngWebFetchMcp.byparr_url}': #{ex.message}")
+  end
+
+  private def request_resource(uri : URI) : String
+    resource = uri.path.empty? ? "/" : uri.path
+    return resource unless query = uri.query
+    "#{resource}?#{query}"
   end
 end
