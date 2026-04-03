@@ -27,10 +27,6 @@ class WebFetch < MCP::AbstractTool
         "default"     => true,
       },
     },
-    "oneOf" => [
-      {"required" => ["url"]},
-      {"required" => ["urls"]},
-    ],
   }.to_json
 
   def invoke(params : Hash(String, JSON::Any), env : HTTP::Server::Context? = nil)
