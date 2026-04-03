@@ -7,17 +7,21 @@ on:
     inputs:
       version:
         description: 'Version tag (e.g., v0.1.4)'
-        required: false
-        default: ''
+        required: true
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.version }}
 
 jobs:
   build-linux-x86_64:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       uses: crystal-lang/install-crystal@v1
       with:
@@ -29,12 +33,16 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-linux-x86_64
+        overwrite_files: true
 
   build-linux-arm64:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       uses: crystal-lang/install-crystal@v1
       with:
@@ -46,12 +54,16 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-linux-arm64
+        overwrite_files: true
 
   build-linux-riscv64:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       uses: crystal-lang/install-crystal@v1
       with:
@@ -63,12 +75,16 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-linux-riscv64
+        overwrite_files: true
 
   build-macos-arm64:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       run: brew install crystal
     - name: Build
@@ -78,12 +94,16 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-darwin-arm64
+        overwrite_files: true
 
   build-macos-x86_64:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       run: brew install crystal
     - name: Build
@@ -93,12 +113,18 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-darwin-x86_64
+        overwrite_files: true
 
   build-windows-x86_64:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
+    - name: Enable Windows developer prompt
+      uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ env.RELEASE_TAG }}
     - name: Install Crystal
       uses: crystal-lang/install-crystal@v1
       with:
@@ -110,4 +136,6 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ env.RELEASE_TAG }}
         files: searxng-web-fetch-mcp-windows-x86_64.exe
+        overwrite_files: true
