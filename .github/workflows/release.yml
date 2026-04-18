@@ -1,74 +1,80 @@
-name: Build and Release Binaries
+name: Release Notes
 
 on:
   release:
-    types: [created]
+    types: [published, edited]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.3.0)'
+        description: 'Version tag (e.g. v0.3.0)'
         required: true
 
 permissions:
   contents: write
 
-env:
-  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.version }}
-
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            name: better-search-mcp-linux-x86_64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-            name: better-search-mcp-linux-arm64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: riscv64
-            name: better-search-mcp-linux-riscv64
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-            name: better-search-mcp-darwin-arm64
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-            name: better-search-mcp-darwin-x86_64
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-            name: better-search-mcp-windows-x86_64.exe
+  notes:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+      - name: Resolve release tag
+        id: tag
+        shell: bash
         run: |
-          go build -o ${{ matrix.name }} .
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload
-        uses: softprops/action-gh-release@v1
+      - name: Build release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          previous_tag="$(git tag --sort=-version:refname | grep -Fxv "$tag" | head -n 1 || true)"
+
+          {
+            echo "body<<EOF"
+            echo "## Release Notes for ${tag}"
+            echo
+            if [ -n "$previous_tag" ]; then
+              echo "Changes since ${previous_tag}:"
+              echo
+              git log --no-merges --pretty=format:'- %s (%h)' "${previous_tag}..${tag}"
+            else
+              echo "Initial release or no previous tag was found."
+              echo
+              git log --no-merges --pretty=format:'- %s (%h)' "${tag}" | head -n 50
+            fi
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update release body
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_BODY: ${{ steps.notes.outputs.body }}
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: ${{ matrix.name }}
-          overwrite_files: true
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const body = process.env.RELEASE_BODY;
+            const release = context.payload.release
+              ? context.payload.release
+              : (await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag,
+                })).data;
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              body,
+            });
