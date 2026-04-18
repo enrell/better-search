@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/enrell/better-search-mcp/internal/config"
 	"github.com/enrell/better-search-mcp/internal/tools"
 )
 
@@ -59,7 +60,7 @@ func getToolsList() []toolDefinition {
 	}
 }
 
-func handleToolCall(params map[string]interface{}) (callToolResult, bool) {
+func handleToolCall(cfg config.Config, params map[string]interface{}) (callToolResult, bool) {
 	toolName, ok := params["name"].(string)
 	if !ok {
 		return makeErrorResult("Missing 'name' parameter"), true
@@ -75,9 +76,9 @@ func handleToolCall(params map[string]interface{}) (callToolResult, bool) {
 
 	switch toolName {
 	case "searxng_web_search":
-		result, err = tools.Search(arguments)
+		result, err = tools.Search(cfg, arguments)
 	case "web_fetch":
-		result, err = tools.Fetch(arguments)
+		result, err = tools.Fetch(cfg, arguments)
 	default:
 		return makeErrorResult(fmt.Sprintf("Unknown tool: %s", toolName)), true
 	}

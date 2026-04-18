@@ -52,7 +52,7 @@ type BatchFetchResponse struct {
 	Results []FetchResult `json:"results"`
 }
 
-func Search(arguments map[string]interface{}) (interface{}, error) {
+func Search(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
 	query, ok := arguments["query"].(string)
 	if !ok || query == "" {
 		return nil, fmt.Errorf("'query' parameter is required")
@@ -68,10 +68,10 @@ func Search(arguments map[string]interface{}) (interface{}, error) {
 		language = lang
 	}
 
-	return searchSearXNG(query, numResults, language)
+	return searchSearXNG(cfg, query, numResults, language)
 }
 
-func Fetch(arguments map[string]interface{}) (interface{}, error) {
+func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
 	includeMetadata := true
 	if im, ok := arguments["include_metadata"].(bool); ok {
 		includeMetadata = im
@@ -85,19 +85,19 @@ func Fetch(arguments map[string]interface{}) (interface{}, error) {
 			}
 		}
 		if len(urls) > 0 {
-			return fetchBatch(urls, includeMetadata), nil
+			return fetchBatch(cfg, urls, includeMetadata), nil
 		}
 	}
 
 	if urlStr, ok := arguments["url"].(string); ok && urlStr != "" {
-		return fetchSingleResult(urlStr, includeMetadata), nil
+		return fetchSingleResult(cfg, urlStr, includeMetadata), nil
 	}
 
 	return nil, fmt.Errorf("Either 'url' or 'urls' parameter is required")
 }
 
-func searchSearXNG(query string, numResults int, language string) (SearchResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.MCPTimeout)*time.Second)
+func searchSearXNG(cfg config.Config, query string, numResults int, language string) (SearchResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
 
 	params := url.Values{}
@@ -109,7 +109,7 @@ func searchSearXNG(query string, numResults int, language string) (SearchRespons
 	params.Add("safesearch", "0")
 	params.Add("num_results", fmt.Sprintf("%d", numResults))
 
-	searchURL := config.SearxngURL
+	searchURL := cfg.SearxngURL
 	if searchURL[len(searchURL)-1] == '/' {
 		searchURL += "search?" + params.Encode()
 	} else {
@@ -122,7 +122,7 @@ func searchSearXNG(query string, numResults int, language string) (SearchRespons
 	}
 
 	client := &http.Client{
-		Timeout: time.Duration(config.MCPTimeout) * time.Second,
+		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
 	}
 
 	resp, err := client.Do(req)
@@ -175,8 +175,8 @@ func searchSearXNG(query string, numResults int, language string) (SearchRespons
 	}, nil
 }
 
-func fetchBatch(urls []string, includeMetadata bool) BatchFetchResponse {
-	maxConcurrent := config.MaxConcurrentRequests
+func fetchBatch(cfg config.Config, urls []string, includeMetadata bool) BatchFetchResponse {
+	maxConcurrent := cfg.MaxConcurrentRequests
 	if maxConcurrent <= 0 {
 		maxConcurrent = 10
 	}
@@ -191,7 +191,7 @@ func fetchBatch(urls []string, includeMetadata bool) BatchFetchResponse {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			results[idx] = fetchSingleResult(rawURL, includeMetadata)
+			results[idx] = fetchSingleResult(cfg, rawURL, includeMetadata)
 		}(i, u)
 	}
 
@@ -204,8 +204,8 @@ func fetchBatch(urls []string, includeMetadata bool) BatchFetchResponse {
 	}
 }
 
-func fetchSingleResult(rawURL string, includeMetadata bool) FetchResult {
-	html, err := fetchViaByparr(rawURL)
+func fetchSingleResult(cfg config.Config, rawURL string, includeMetadata bool) FetchResult {
+	html, err := fetchViaByparr(cfg, rawURL)
 	if err != nil {
 		return FetchResult{
 			Success: false,
@@ -244,20 +244,20 @@ func fetchSingleResult(rawURL string, includeMetadata bool) FetchResult {
 	return result
 }
 
-func fetchViaByparr(rawURL string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.MCPTimeout)*time.Second)
+func fetchViaByparr(cfg config.Config, rawURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
 
 	byparrReq, err := json.Marshal(map[string]interface{}{
 		"cmd":        "request.get",
 		"url":        rawURL,
-		"maxTimeout": config.MCPTimeout * 1000,
+		"maxTimeout": cfg.MCPTimeout * 1000,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", config.ByparrURL+"/v1", bytes.NewReader(byparrReq))
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.ByparrURL+"/v1", bytes.NewReader(byparrReq))
 	if err != nil {
 		return "", err
 	}
@@ -266,7 +266,7 @@ func fetchViaByparr(rawURL string) (string, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	client := &http.Client{
-		Timeout: time.Duration(config.MCPTimeout) * time.Second,
+		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
 	}
 
 	resp, err := client.Do(req)

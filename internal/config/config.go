@@ -1,17 +1,82 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
-var (
-	SearxngURL            = envOrDefault("SEARXNG_URL", "http://localhost:8080")
-	ByparrURL             = envOrDefault("BYPARR_URL", "http://localhost:8191")
-	LogLevel              = envOrDefault("LOG_LEVEL", "INFO")
-	MCPTimeout            = envIntOrDefault("MCP_TIMEOUT", 30)
-	MaxConcurrentRequests = envIntOrDefault("MAX_CONCURRENT_REQUESTS", 30)
+const (
+	defaultSearxngURL            = "http://localhost:8080"
+	defaultByparrURL             = "http://localhost:8191"
+	defaultLogLevel              = "INFO"
+	defaultMCPTimeout            = 30
+	defaultMaxConcurrentRequests = 30
 )
+
+var logLevels = map[string]int{
+	"DEBUG": 0,
+	"INFO":  1,
+	"WARN":  2,
+	"ERROR": 3,
+}
+
+type Config struct {
+	SearxngURL            string
+	ByparrURL             string
+	LogLevel              string
+	MCPTimeout            int
+	MaxConcurrentRequests int
+}
+
+func Load() (Config, error) {
+	cfg := Config{
+		SearxngURL:            envOrDefault("SEARXNG_URL", defaultSearxngURL),
+		ByparrURL:             envOrDefault("BYPARR_URL", defaultByparrURL),
+		LogLevel:              strings.ToUpper(envOrDefault("LOG_LEVEL", defaultLogLevel)),
+		MCPTimeout:            envIntOrDefault("MCP_TIMEOUT", defaultMCPTimeout),
+		MaxConcurrentRequests: envIntOrDefault("MAX_CONCURRENT_REQUESTS", defaultMaxConcurrentRequests),
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+
+	return cfg, nil
+}
+
+func (c Config) Validate() error {
+	if err := validateBaseURL("SEARXNG_URL", c.SearxngURL); err != nil {
+		return err
+	}
+	if err := validateBaseURL("BYPARR_URL", c.ByparrURL); err != nil {
+		return err
+	}
+	if _, ok := logLevels[c.LogLevel]; !ok {
+		return fmt.Errorf("LOG_LEVEL must be one of DEBUG, INFO, WARN, ERROR")
+	}
+	if c.MCPTimeout <= 0 {
+		return fmt.Errorf("MCP_TIMEOUT must be greater than zero")
+	}
+	if c.MaxConcurrentRequests <= 0 {
+		return fmt.Errorf("MAX_CONCURRENT_REQUESTS must be greater than zero")
+	}
+	return nil
+}
+
+func (c Config) ShouldLog(level string) bool {
+	current, ok1 := logLevels[c.LogLevel]
+	msg, ok2 := logLevels[strings.ToUpper(level)]
+	return ok1 && ok2 && current <= msg
+}
+
+func (c Config) LogMsg(level, message string) {
+	if c.ShouldLog(level) {
+		_, _ = os.Stderr.WriteString("[" + strings.ToUpper(level) + "] " + message + "\n")
+	}
+}
 
 func envOrDefault(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
@@ -29,15 +94,16 @@ func envIntOrDefault(key string, defaultVal int) int {
 	return defaultVal
 }
 
-func ShouldLog(level string) bool {
-	levels := map[string]int{"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
-	current, ok1 := levels[LogLevel]
-	msg, ok2 := levels[level]
-	return ok1 && ok2 && current <= msg
-}
-
-func LogMsg(level, message string) {
-	if ShouldLog(level) {
-		os.Stderr.WriteString("[" + level + "] " + message + "\n")
+func validateBaseURL(key, raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL: %w", key, err)
 	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("%s must use http or https", key)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("%s must include a host", key)
+	}
+	return nil
 }

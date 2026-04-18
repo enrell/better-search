@@ -12,13 +12,13 @@ import (
 
 const version = "0.3.0"
 
-func Run() {
-	if config.LogLevel == "DEBUG" {
-		config.LogMsg("DEBUG", fmt.Sprintf("Starting MCP server v%s", version))
-		config.LogMsg("DEBUG", fmt.Sprintf("SEARXNG_URL: %s", config.SearxngURL))
-		config.LogMsg("DEBUG", fmt.Sprintf("BYPARR_URL: %s", config.ByparrURL))
-		config.LogMsg("DEBUG", fmt.Sprintf("MAX_CONCURRENT_REQUESTS: %d", config.MaxConcurrentRequests))
-		config.LogMsg("DEBUG", fmt.Sprintf("MCP_TIMEOUT: %ds", config.MCPTimeout))
+func Run(cfg config.Config) {
+	if cfg.LogLevel == "DEBUG" {
+		cfg.LogMsg("DEBUG", fmt.Sprintf("Starting MCP server v%s", version))
+		cfg.LogMsg("DEBUG", fmt.Sprintf("SEARXNG_URL: %s", cfg.SearxngURL))
+		cfg.LogMsg("DEBUG", fmt.Sprintf("BYPARR_URL: %s", cfg.ByparrURL))
+		cfg.LogMsg("DEBUG", fmt.Sprintf("MAX_CONCURRENT_REQUESTS: %d", cfg.MaxConcurrentRequests))
+		cfg.LogMsg("DEBUG", fmt.Sprintf("MCP_TIMEOUT: %ds", cfg.MCPTimeout))
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -33,21 +33,21 @@ func Run() {
 		wg.Add(1)
 		go func(data []byte) {
 			defer wg.Done()
-			handleRequest(data)
+			handleRequest(cfg, data)
 		}(append([]byte(nil), line...))
 	}
 
 	wg.Wait()
 
 	if err := scanner.Err(); err != nil {
-		config.LogMsg("ERROR", fmt.Sprintf("Scanner error: %v", err))
+		cfg.LogMsg("ERROR", fmt.Sprintf("Scanner error: %v", err))
 	}
 }
 
-func handleRequest(data []byte) {
+func handleRequest(cfg config.Config, data []byte) {
 	var req jsonRPCRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		sendResponse(nil, nil, &jsonRPCError{Code: -32700, Message: "Parse error"})
+		sendResponse(cfg, nil, nil, &jsonRPCError{Code: -32700, Message: "Parse error"})
 		return
 	}
 
@@ -63,35 +63,35 @@ func handleRequest(data []byte) {
 				"version": version,
 			},
 		}
-		sendResponse(req.ID, result, nil)
+		sendResponse(cfg, req.ID, result, nil)
 
 	case "tools/list":
 		tools := getToolsList()
-		sendResponse(req.ID, toolsListResult{Tools: tools}, nil)
+		sendResponse(cfg, req.ID, toolsListResult{Tools: tools}, nil)
 
 	case "tools/call":
 		var params map[string]interface{}
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			sendResponse(req.ID, nil, &jsonRPCError{Code: -32602, Message: "Invalid params"})
+			sendResponse(cfg, req.ID, nil, &jsonRPCError{Code: -32602, Message: "Invalid params"})
 			return
 		}
-		result, isError := handleToolCall(params)
-		sendResponse(req.ID, result, nil)
+		result, isError := handleToolCall(cfg, params)
+		sendResponse(cfg, req.ID, result, nil)
 		if isError {
-			config.LogMsg("ERROR", fmt.Sprintf("Tool call error: %v", result))
+			cfg.LogMsg("ERROR", fmt.Sprintf("Tool call error: %v", result))
 		}
 
 	case "ping":
-		sendResponse(req.ID, map[string]interface{}{}, nil)
+		sendResponse(cfg, req.ID, map[string]interface{}{}, nil)
 
 	default:
 		if req.ID != nil {
-			sendResponse(req.ID, nil, &jsonRPCError{Code: -32601, Message: "Method not found"})
+			sendResponse(cfg, req.ID, nil, &jsonRPCError{Code: -32601, Message: "Method not found"})
 		}
 	}
 }
 
-func sendResponse(id *json.RawMessage, result interface{}, rpcErr *jsonRPCError) {
+func sendResponse(cfg config.Config, id *json.RawMessage, result interface{}, rpcErr *jsonRPCError) {
 	resp := jsonRPCResponse{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -101,7 +101,7 @@ func sendResponse(id *json.RawMessage, result interface{}, rpcErr *jsonRPCError)
 
 	data, err := json.Marshal(resp)
 	if err != nil {
-		config.LogMsg("ERROR", fmt.Sprintf("Failed to marshal response: %v", err))
+		cfg.LogMsg("ERROR", fmt.Sprintf("Failed to marshal response: %v", err))
 		return
 	}
 

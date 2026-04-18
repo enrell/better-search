@@ -1,9 +1,19 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
+	"github.com/enrell/better-search-mcp/internal/config"
 	"github.com/enrell/better-search-mcp/internal/mcp"
 )
 
 func main() {
-	mcp.Run()
+	cfg, err := config.Load()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
+		os.Exit(1)
+	}
+
+	mcp.Run(cfg)
 }
