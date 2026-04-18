@@ -1,11 +1,8 @@
 package tools
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -13,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/enrell/better-search-mcp/internal/clients/byparr"
+	"github.com/enrell/better-search-mcp/internal/clients/searxng"
 	"github.com/enrell/better-search-mcp/internal/config"
 	"github.com/enrell/better-search-mcp/internal/extractor"
 )
@@ -184,66 +183,14 @@ func searchSearXNG(cfg config.Config, query string, numResults int, language str
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
 
-	params := url.Values{}
-	params.Add("q", query)
-	params.Add("format", "json")
-	params.Add("lang", language)
-	params.Add("engines", "general")
-	params.Add("categories", "general")
-	params.Add("safesearch", "0")
-	params.Add("num_results", fmt.Sprintf("%d", numResults))
-
-	searchURL := cfg.SearxngURL
-	if strings.HasSuffix(searchURL, "/") {
-		searchURL += "search?" + params.Encode()
-	} else {
-		searchURL += "/search?" + params.Encode()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	client := searxng.NewClient(cfg.SearxngURL, newHTTPClient(cfg))
+	resp, err := client.Search(ctx, query, numResults, language)
 	if err != nil {
-		return SearchResponse{Success: false, Error: fmt.Sprintf("Failed to create request: %v", err)}, nil
+		return SearchResponse{Success: false, Error: err.Error(), Results: []SearchResult{}}, nil
 	}
 
-	client := &http.Client{
-		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return SearchResponse{Success: false, Error: fmt.Sprintf("Request failed: %v", err)}, nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return SearchResponse{
-			Success: false,
-			Error:   fmt.Sprintf("SearXNG returned status %d: %s", resp.StatusCode, string(body)),
-			Results: []SearchResult{},
-		}, nil
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return SearchResponse{Success: false, Error: fmt.Sprintf("Failed to read response: %v", err)}, nil
-	}
-
-	var searxngResp struct {
-		Results []struct {
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Content string `json:"content"`
-			Engine  string `json:"engine"`
-		} `json:"results"`
-	}
-
-	if err := json.Unmarshal(body, &searxngResp); err != nil {
-		return SearchResponse{Success: false, Error: fmt.Sprintf("Failed to parse response: %v", err)}, nil
-	}
-
-	results := make([]SearchResult, 0, len(searxngResp.Results))
-	for _, r := range searxngResp.Results {
+	results := make([]SearchResult, 0, len(resp.Results))
+	for _, r := range resp.Results {
 		results = append(results, SearchResult{
 			Title:   r.Title,
 			URL:     r.URL,
@@ -332,75 +279,19 @@ func fetchViaByparr(cfg config.Config, rawURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
 
-	byparrReq, err := json.Marshal(map[string]interface{}{
-		"cmd":        "request.get",
-		"url":        rawURL,
-		"maxTimeout": cfg.MCPTimeout * 1000,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.ByparrURL+"/v1", bytes.NewReader(byparrReq))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-	client := &http.Client{
-		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	client := byparr.NewClient(cfg.ByparrURL, newHTTPClient(cfg))
+	resp, err := client.Fetch(ctx, rawURL, cfg.MCPTimeout*1000)
 	if err != nil {
 		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
 			return "", context.DeadlineExceeded
 		}
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", &byparrError{status: resp.StatusCode, body: string(body)}
-	}
-
-	var byparrResp struct {
-		Status   string `json:"status"`
-		Message  string `json:"message"`
-		Solution struct {
-			URL      string `json:"url"`
-			Status   int    `json:"status"`
-			Response string `json:"response"`
-			Cookies  []struct {
-				Name  string `json:"name"`
-				Value string `json:"value"`
-			} `json:"cookies"`
-			Headers map[string]interface{} `json:"headers"`
-		} `json:"solution"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&byparrResp); err != nil {
-		return "", err
-	}
-
-	if byparrResp.Status != "ok" {
-		return "", &byparrError{status: 0, body: byparrResp.Message}
-	}
-
-	return byparrResp.Solution.Response, nil
+	return resp.Solution.Response, nil
 }
 
-type byparrError struct {
-	status int
-	body   string
-}
-
-func (e *byparrError) Error() string {
-	if e.status > 0 {
-		return "Byparr error: HTTP " + strings.TrimSpace(e.body)
+func newHTTPClient(cfg config.Config) *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
 	}
-	return "Byparr error: " + strings.TrimSpace(e.body)
 }
