@@ -12,36 +12,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          crystal: 1.19.1
+          go-version: '1.23'
 
-      - name: Install dependencies
-        run: shards install
+      - name: Download dependencies
+        run: go mod download
 
-      - name: Run ameba linter
-        run: |
-          if [ -f bin/ameba ]; then
-            ./bin/ameba
-          else
-            shards install && ./bin/ameba
-          fi
+      - name: Build
+        run: go build -v ./...
 
       - name: Run tests
-        run: crystal spec
+        run: go test -v ./...
 
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          crystal: 1.19.1
+          go-version: '1.23'
 
       - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
         run: |
-          shards install --without development
-          crystal build src/searxng_web_fetch_mcp.cr --release
+          mkdir -p dist
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
+          go build -o dist/better-search-mcp-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: better-search-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/

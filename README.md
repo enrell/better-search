@@ -1,6 +1,6 @@
-# SearXNG Web Fetch MCP Server
+# Better Search MCP
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server written in Crystal that provides web search and content extraction capabilities through SearXNG and Byparr proxy.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server written in Go that provides web search and content extraction capabilities through SearXNG and Byparr proxy.
 
 ## Features
 
@@ -9,7 +9,7 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server writte
 - **Batch Fetching**: Fetch multiple URLs in parallel with concurrent processing
 - **HTML to Markdown**: Converts extracted content to clean Markdown format
 - **Trafilatura-style Extraction**: Smart content extraction that identifies the main article content
-- **Fiber-based Concurrency**: Uses Crystal fibers for efficient parallel I/O
+- **Easy Installation**: Install with `go install`
 
 ## Prerequisites
 
@@ -18,13 +18,13 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server writte
 
 ## Quick Start
 
-### 1. Install the binary
+### 1. Install with Go
 
 ```bash
-curl -sL https://raw.githubusercontent.com/enrell/searxng-web-fetch-mcp/main/install.sh | bash
+go install github.com/enrell/better-search-mcp@latest
 ```
 
-This downloads the latest release binary to `~/.local/bin/searxng-web-fetch-mcp`.
+The binary will be installed to `$GOPATH/bin/better-search-mcp` (usually `~/go/bin/`).
 
 ### 2. Configure your MCP client
 
@@ -34,9 +34,9 @@ Add to your MCP configuration file:
 ```json
 {
   "mcp": {
-    "searxng-web": {
+    "better-search": {
       "type": "local",
-      "command": ["/home/YOUR_USER/.local/bin/searxng-web-fetch-mcp"],
+      "command": ["$HOME/go/bin/better-search-mcp"],
       "environment": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191"
@@ -50,8 +50,8 @@ Add to your MCP configuration file:
 ```json
 {
   "mcpServers": {
-    "searxng-web": {
-      "command": "/home/YOUR_USER/.local/bin/searxng-web-fetch-mcp",
+    "better-search": {
+      "command": "$HOME/go/bin/better-search-mcp",
       "env": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191"
@@ -61,30 +61,23 @@ Add to your MCP configuration file:
 }
 ```
 
-> **Note:** Replace `/home/YOUR_USER` with your actual home directory path (e.g., `/home/kokoro` or use `$HOME` environment variable).
+> **Note:** Replace `$HOME` with your actual home directory path if your client doesn't expand environment variables.
 
-## Install Script
+## Build from Source
 
-The install script automatically detects your platform and architecture:
+Requires [Go](https://go.dev/) 1.23+:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/enrell/searxng-web-fetch-mcp/main/install.sh | bash
+git clone https://github.com/enrell/better-search-mcp.git
+cd better-search-mcp
+go build -o better-search-mcp .
 ```
 
-**Supported platforms:**
-- Linux: x86_64, arm64, riscv64
-- macOS: x86_64, arm64 (Apple Silicon)
-- Windows: x86_64
-
-## Usage
-
-Ensure SearXNG and Byparr are running, then use the MCP as configured above.
-
-**Environment Variables:**
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARXNG_URL` | URL of your SearXNG instance | `http://localhost:8888` |
+| `SEARXNG_URL` | URL of your SearXNG instance | `http://localhost:8080` |
 | `BYPARR_URL` | URL of your Byparr proxy | `http://localhost:8191` |
 | `LOG_LEVEL` | Logging verbosity (DEBUG, INFO, WARN, ERROR) | `INFO` |
 | `MCP_TIMEOUT` | Request timeout in seconds | `30` |
@@ -119,19 +112,6 @@ Fetch and extract content from web pages. Supports single URL or batch fetching.
     "https://example.com/article3"
   ]
 }
-```
-
-**Performance:** ~25-33 URLs/second with concurrent fiber-based processing.
-
-## Build from Source
-
-Requires [Crystal](https://crystal-lang.org/) 1.19.1+:
-
-```bash
-git clone https://github.com/enrell/searxng-web-fetch-mcp.git
-cd searxng-web-fetch-mcp
-shards install --without development
-crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp --release
 ```
 
 ## License

@@ -1,7 +1,16 @@
-/docs/
-/lib/
+# Go
 /bin/
-/.shards/
-/npm/native/
-*.dwarf
-npm/native/
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

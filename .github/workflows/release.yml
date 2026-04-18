@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.1.4)'
+        description: 'Version tag (e.g., v0.3.0)'
         required: true
 
 permissions:
@@ -16,126 +16,59 @@ env:
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.version }}
 
 jobs:
-  build-linux-x86_64:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            name: better-search-mcp-linux-x86_64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            name: better-search-mcp-linux-arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: riscv64
+            name: better-search-mcp-linux-riscv64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            name: better-search-mcp-darwin-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            name: better-search-mcp-darwin-x86_64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            name: better-search-mcp-windows-x86_64.exe
     steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      uses: crystal-lang/install-crystal@v1
-      with:
-        crystal: 1.19.1
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-x86_64 --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-linux-x86_64
-        overwrite_files: true
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
-  build-linux-arm64:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      uses: crystal-lang/install-crystal@v1
-      with:
-        crystal: 1.19.1
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-arm64 --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-linux-arm64
-        overwrite_files: true
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
 
-  build-linux-riscv64:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      uses: crystal-lang/install-crystal@v1
-      with:
-        crystal: 1.19.1
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-linux-riscv64 --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-linux-riscv64
-        overwrite_files: true
+      - name: Download dependencies
+        run: go mod download
 
-  build-macos-arm64:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      run: brew install crystal
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-darwin-arm64 --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-darwin-arm64
-        overwrite_files: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -o ${{ matrix.name }} .
 
-  build-macos-x86_64:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      run: brew install crystal
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-darwin-x86_64 --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-darwin-x86_64
-        overwrite_files: true
-
-  build-windows-x86_64:
-    runs-on: windows-2022
-    steps:
-    - name: Enable Windows developer prompt
-      uses: ilammy/msvc-dev-cmd@cec98b9d092141f74527d0afa6feb2af698cfe89
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ env.RELEASE_TAG }}
-    - name: Install Crystal
-      uses: crystal-lang/install-crystal@v1
-      with:
-        crystal: 1.19.1
-    - name: Build
-      run: |
-        shards install --without development
-        crystal build src/searxng_web_fetch_mcp.cr -o searxng-web-fetch-mcp-windows-x86_64.exe --release
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        files: searxng-web-fetch-mcp-windows-x86_64.exe
-        overwrite_files: true
+      - name: Upload
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: ${{ matrix.name }}
+          overwrite_files: true
