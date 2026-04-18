@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -73,9 +74,31 @@ func (c Config) ShouldLog(level string) bool {
 }
 
 func (c Config) LogMsg(level, message string) {
-	if c.ShouldLog(level) {
-		_, _ = os.Stderr.WriteString("[" + strings.ToUpper(level) + "] " + message + "\n")
+	c.LogAttrs(level, message, nil)
+}
+
+func (c Config) LogAttrs(level, message string, attrs map[string]interface{}) {
+	if !c.ShouldLog(level) {
+		return
 	}
+
+	var builder strings.Builder
+	builder.WriteString("ts=")
+	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
+	builder.WriteString(" level=")
+	builder.WriteString(strings.ToUpper(level))
+	builder.WriteString(" msg=")
+	builder.WriteString(strconv.Quote(message))
+
+	for key, value := range attrs {
+		builder.WriteByte(' ')
+		builder.WriteString(key)
+		builder.WriteByte('=')
+		builder.WriteString(fmt.Sprint(value))
+	}
+
+	builder.WriteByte('\n')
+	_, _ = os.Stderr.WriteString(builder.String())
 }
 
 func envOrDefault(key, defaultVal string) string {

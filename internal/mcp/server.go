@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/enrell/better-search-mcp/internal/config"
 )
@@ -16,6 +18,7 @@ type server struct {
 	cfg       config.Config
 	writeMu   sync.Mutex
 	requestWG sync.WaitGroup
+	requestID atomic.Uint64
 }
 
 func Run(cfg config.Config) {
@@ -53,11 +56,27 @@ func Run(cfg config.Config) {
 }
 
 func (s *server) handleRequest(data []byte) {
+	startedAt := time.Now()
+	requestID := fmt.Sprintf("req-%06d", s.requestID.Add(1))
+	defer s.cfg.LogAttrs("DEBUG", "completed request", map[string]interface{}{
+		"request_id": requestID,
+		"elapsed_ms": time.Since(startedAt).Milliseconds(),
+	})
+
 	var req jsonRPCRequest
 	if err := json.Unmarshal(data, &req); err != nil {
+		s.cfg.LogAttrs("ERROR", "failed to parse request", map[string]interface{}{
+			"request_id": requestID,
+			"elapsed_ms": time.Since(startedAt).Milliseconds(),
+		})
 		s.sendResponse(nil, nil, &jsonRPCError{Code: -32700, Message: "Parse error"})
 		return
 	}
+
+	s.cfg.LogAttrs("DEBUG", "received request", map[string]interface{}{
+		"request_id": requestID,
+		"method":     req.Method,
+	})
 
 	switch req.Method {
 	case "initialize":
@@ -80,6 +99,10 @@ func (s *server) handleRequest(data []byte) {
 	case "tools/call":
 		var params map[string]interface{}
 		if err := json.Unmarshal(req.Params, &params); err != nil {
+			s.cfg.LogAttrs("WARN", "invalid tool params", map[string]interface{}{
+				"request_id": requestID,
+				"method":     req.Method,
+			})
 			s.sendResponse(req.ID, nil, &jsonRPCError{Code: -32602, Message: "Invalid params"})
 			return
 		}
@@ -87,7 +110,11 @@ func (s *server) handleRequest(data []byte) {
 		result, isError := handleToolCall(s.cfg, params)
 		s.sendResponse(req.ID, result, nil)
 		if isError {
-			s.cfg.LogMsg("ERROR", fmt.Sprintf("Tool call error: %v", result))
+			s.cfg.LogAttrs("ERROR", "tool call failed", map[string]interface{}{
+				"request_id": requestID,
+				"tool":       params["name"],
+				"elapsed_ms": time.Since(startedAt).Milliseconds(),
+			})
 		}
 
 	case "ping":

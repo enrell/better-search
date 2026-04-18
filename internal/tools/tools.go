@@ -182,10 +182,15 @@ func normalizeHTTPURL(raw string) (string, error) {
 func searchSearXNG(cfg config.Config, query string, numResults int, language string) (SearchResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
+	startedAt := time.Now()
 
 	client := searxng.NewClient(cfg.SearxngURL, newHTTPClient(cfg))
 	resp, err := client.Search(ctx, query, numResults, language)
 	if err != nil {
+		cfg.LogAttrs("WARN", "searxng search failed", map[string]interface{}{
+			"query":      query,
+			"elapsed_ms": time.Since(startedAt).Milliseconds(),
+		})
 		return SearchResponse{Success: false, Error: err.Error(), Results: []SearchResult{}}, nil
 	}
 
@@ -198,6 +203,12 @@ func searchSearXNG(cfg config.Config, query string, numResults int, language str
 			Engine:  r.Engine,
 		})
 	}
+
+	cfg.LogAttrs("DEBUG", "searxng search succeeded", map[string]interface{}{
+		"query":        query,
+		"result_count": len(results),
+		"elapsed_ms":   time.Since(startedAt).Milliseconds(),
+	})
 
 	return SearchResponse{
 		Success: true,
@@ -278,15 +289,24 @@ func fetchSingleResult(cfg config.Config, rawURL string, includeMetadata bool) F
 func fetchViaByparr(cfg config.Config, rawURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MCPTimeout)*time.Second)
 	defer cancel()
+	startedAt := time.Now()
 
 	client := byparr.NewClient(cfg.ByparrURL, newHTTPClient(cfg))
 	resp, err := client.Fetch(ctx, rawURL, cfg.MCPTimeout*1000)
 	if err != nil {
+		cfg.LogAttrs("WARN", "byparr fetch failed", map[string]interface{}{
+			"url":        rawURL,
+			"elapsed_ms": time.Since(startedAt).Milliseconds(),
+		})
 		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
 			return "", context.DeadlineExceeded
 		}
 		return "", err
 	}
+	cfg.LogAttrs("DEBUG", "byparr fetch succeeded", map[string]interface{}{
+		"url":        rawURL,
+		"elapsed_ms": time.Since(startedAt).Milliseconds(),
+	})
 	return resp.Solution.Response, nil
 }
 
