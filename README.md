@@ -13,17 +13,89 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server writte
 
 ## Prerequisites
 
-- [SearXNG](https://docs.searxng.org/) running locally or remotely
+- [SearXNG](https://github.com/searxng/searxng) running locally or remotely
 - [Byparr](https://github.com/ThePhaseless/byparr) available as an HTTP service
 - Go 1.23+ if you want to build from source
 
 ## Install
+
+### Option 1: Install with Go
 
 ```bash
 go install github.com/enrell/better-search-mcp@latest
 ```
 
 The binary is installed as `better-search-mcp` in `$GOPATH/bin` or `$HOME/go/bin`.
+
+### Option 2: Install with a Code Agent
+
+Use the prompt below with your preferred code agent if you want the agent to set up SearXNG, Byparr, validate both services, install this MCP, and configure it in your coding agents.
+
+The prompt tells the agent to consult the official SearXNG container installation docs and the Byparr repository before making changes:
+
+- SearXNG container install docs: `https://docs.searxng.org/admin/installation-docker.html#installation-container`
+- Byparr repository: `https://github.com/ThePhaseless/Byparr`
+
+Prompt:
+
+<details>
+<summary>Code agent install prompt</summary>
+
+```text
+Set up Better Search MCP end to end on this machine.
+
+Requirements:
+1. Before doing anything, read these sources and use them as the installation reference:
+   - https://docs.searxng.org/admin/installation-docker.html#installation-container
+   - https://github.com/ThePhaseless/Byparr
+2. First inspect the machine and determine whether SearXNG and Byparr are already running and healthy.
+3. If they are already running, do not reinstall them. Reuse the existing services.
+4. If they are not running, install and start them.
+5. Before creating any new container directories, inspect whether I already use a dedicated containers folder pattern, such as:
+   - ~/Containers
+   - ~/containers
+   - ~/docker
+   - ~/compose
+   - any similar directory containing per-service folders and compose files
+6. If I already have an established pattern for container projects, follow my existing convention and place new service folders there.
+7. If I do not have an established pattern, ask me to choose between:
+   - Docker Compose / docker compose
+   - Docker CLI
+   - Podman
+   Default to Docker Compose for maintainability, but ask first if no existing convention is detected.
+8. If Podman is installed and I prefer Podman, keep the setup aligned for Podman instead of Docker.
+9. After starting SearXNG and Byparr, verify both with curl before continuing:
+   - Verify SearXNG responds successfully on its configured local URL
+   - Verify Byparr responds successfully on its configured local URL
+10. Only after both services are confirmed healthy, install this MCP:
+   - go install github.com/enrell/better-search-mcp@latest
+11. Then configure the MCP for my installed code agents. Detect which coding agents I use and update their MCP config files if possible. At minimum, check for:
+   - Claude Code
+   - OpenCode
+   - other local coding-agent MCP configs you can detect safely
+12. Use these environment variables in the MCP config, matching the actual working local endpoints:
+   - SEARXNG_URL
+   - BYPARR_URL
+   - LOG_LEVEL=INFO
+13. Show me:
+   - where you placed the SearXNG files
+   - where you placed the Byparr files
+   - the exact URLs used for both services
+   - the MCP config changes you made
+   - the curl commands and their outputs used to validate the services
+
+Implementation details:
+- Prefer reusing existing service directories and compose files if they already exist and are valid.
+- If existing files are broken or incomplete, repair them instead of creating a parallel setup unless there is a strong reason not to.
+- If SearXNG and Byparr are already healthy, skip directly to MCP installation and configuration.
+- For SearXNG, prefer the documented compose-based setup when creating a new deployment, unless I explicitly prefer another method.
+- For Byparr, use the repository’s documented container approach. If the repo already provides a compose file or compose-based workflow, prefer that when using Compose.
+- Do not assume ports blindly; inspect actual running services and local configs first.
+- Keep the setup local-only unless I explicitly ask to expose it publicly.
+- Stop and ask before making destructive changes to an existing container stack.
+```
+
+</details>
 
 ## MCP Client Configuration
 
@@ -128,7 +200,7 @@ Rules:
 
 - Provide either `url` or `urls`, never both
 - URLs must be valid `http` or `https`
-- Duplicate batch URLs are removed automatically
+- Duplicate batch URLs are preserved in order, so batch results keep the same cardinality as the input list
 
 Example, single fetch:
 
