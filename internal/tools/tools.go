@@ -8,12 +8,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/enrell/better-search-mcp/internal/config"
 	"github.com/enrell/better-search-mcp/internal/extractor"
+)
+
+const (
+	defaultNumResults = 10
+	maxNumResults     = 50
+	maxBatchURLs      = 25
 )
 
 type SearchResult struct {
@@ -54,18 +61,25 @@ type BatchFetchResponse struct {
 
 func Search(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
 	query, ok := arguments["query"].(string)
+	query = strings.TrimSpace(query)
 	if !ok || query == "" {
 		return nil, fmt.Errorf("'query' parameter is required")
 	}
 
-	numResults := 10
+	numResults := defaultNumResults
 	if nr, ok := arguments["num_results"].(float64); ok {
 		numResults = int(nr)
+	}
+	if numResults < 1 || numResults > maxNumResults {
+		return nil, fmt.Errorf("'num_results' must be between 1 and %d", maxNumResults)
 	}
 
 	language := "en"
 	if lang, ok := arguments["language"].(string); ok {
-		language = lang
+		language = strings.TrimSpace(lang)
+	}
+	if language == "" {
+		language = "en"
 	}
 
 	return searchSearXNG(cfg, query, numResults, language)
@@ -77,23 +91,93 @@ func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, er
 		includeMetadata = im
 	}
 
+	urlStr, hasURL := arguments["url"].(string)
+	urlStr = strings.TrimSpace(urlStr)
+
+	var urls []string
 	if urlsRaw, ok := arguments["urls"].([]interface{}); ok {
-		urls := make([]string, 0, len(urlsRaw))
-		for _, u := range urlsRaw {
-			if s, ok := u.(string); ok {
-				urls = append(urls, s)
-			}
+		normalizedURLs, err := normalizeURLBatch(urlsRaw)
+		if err != nil {
+			return nil, err
 		}
-		if len(urls) > 0 {
-			return fetchBatch(cfg, urls, includeMetadata), nil
-		}
+		urls = normalizedURLs
 	}
 
-	if urlStr, ok := arguments["url"].(string); ok && urlStr != "" {
-		return fetchSingleResult(cfg, urlStr, includeMetadata), nil
+	if hasURL && len(urls) > 0 {
+		return nil, fmt.Errorf("provide either 'url' or 'urls', not both")
 	}
 
-	return nil, fmt.Errorf("Either 'url' or 'urls' parameter is required")
+	if len(urls) > 0 {
+		return fetchBatch(cfg, urls, includeMetadata), nil
+	}
+
+	if hasURL {
+		if urlStr == "" {
+			return nil, fmt.Errorf("'url' cannot be empty")
+		}
+		normalizedURL, err := normalizeHTTPURL(urlStr)
+		if err != nil {
+			return nil, fmt.Errorf("'url' is invalid: %w", err)
+		}
+		return fetchSingleResult(cfg, normalizedURL, includeMetadata), nil
+	}
+
+	if _, ok := arguments["urls"]; ok {
+		return nil, fmt.Errorf("'urls' must contain between 1 and %d valid URLs", maxBatchURLs)
+	}
+
+	return nil, fmt.Errorf("either 'url' or 'urls' parameter is required")
+}
+
+func normalizeURLBatch(urlsRaw []interface{}) ([]string, error) {
+	if len(urlsRaw) == 0 {
+		return nil, fmt.Errorf("'urls' cannot be empty")
+	}
+	if len(urlsRaw) > maxBatchURLs {
+		return nil, fmt.Errorf("'urls' cannot contain more than %d items", maxBatchURLs)
+	}
+
+	urls := make([]string, 0, len(urlsRaw))
+	for idx, raw := range urlsRaw {
+		rawURL, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("'urls[%d]' must be a string", idx)
+		}
+		normalizedURL, err := normalizeHTTPURL(rawURL)
+		if err != nil {
+			return nil, fmt.Errorf("'urls[%d]' is invalid: %w", idx, err)
+		}
+		if slices.Contains(urls, normalizedURL) {
+			continue
+		}
+		urls = append(urls, normalizedURL)
+	}
+
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("'urls' must contain at least one valid URL")
+	}
+
+	return urls, nil
+}
+
+func normalizeHTTPURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("empty value")
+	}
+
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("host is required")
+	}
+
+	return parsed.String(), nil
 }
 
 func searchSearXNG(cfg config.Config, query string, numResults int, language string) (SearchResponse, error) {
@@ -110,13 +194,13 @@ func searchSearXNG(cfg config.Config, query string, numResults int, language str
 	params.Add("num_results", fmt.Sprintf("%d", numResults))
 
 	searchURL := cfg.SearxngURL
-	if searchURL[len(searchURL)-1] == '/' {
+	if strings.HasSuffix(searchURL, "/") {
 		searchURL += "search?" + params.Encode()
 	} else {
 		searchURL += "/search?" + params.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		return SearchResponse{Success: false, Error: fmt.Sprintf("Failed to create request: %v", err)}, nil
 	}
@@ -257,7 +341,7 @@ func fetchViaByparr(cfg config.Config, rawURL string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", cfg.ByparrURL+"/v1", bytes.NewReader(byparrReq))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.ByparrURL+"/v1", bytes.NewReader(byparrReq))
 	if err != nil {
 		return "", err
 	}
