@@ -1,36 +1,34 @@
 # Better Search MCP
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server written in Go that provides web search and content extraction capabilities through SearXNG and Byparr proxy.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server written in Go that provides web search and article-oriented page fetching through SearXNG and Byparr.
 
 ## Features
 
-- **Web Search**: Search the web using your local SearXNG instance
-- **Web Page Fetching**: Extract clean, article-focused content from any URL
-- **Batch Fetching**: Fetch multiple URLs in parallel with concurrent processing
-- **HTML to Markdown**: Converts extracted content to clean Markdown format
-- **Trafilatura-style Extraction**: Smart content extraction that identifies the main article content
-- **Easy Installation**: Install with `go install`
+- Web search via a local SearXNG instance
+- Single and batch page fetching through Byparr
+- Article-focused extraction with heuristic content scoring
+- HTML to Markdown conversion using a DOM-based renderer
+- Structured MCP tool responses with `structuredContent` and `_meta`
+- Config validation, request logging, and automated tests
 
 ## Prerequisites
 
-- [SearXNG](https://docs.searxng.org/) - A self-hosted metasearch engine
-- [Byparr](https://github.com/ThePhaseless/byparr) - Anti-captcha proxy for web scraping
+- [SearXNG](https://docs.searxng.org/) running locally or remotely
+- [Byparr](https://github.com/ThePhaseless/byparr) available as an HTTP service
+- Go 1.23+ if you want to build from source
 
-## Quick Start
-
-### 1. Install with Go
+## Install
 
 ```bash
 go install github.com/enrell/better-search-mcp@latest
 ```
 
-The binary will be installed to `$GOPATH/bin/better-search-mcp` (usually `~/go/bin/`).
+The binary is installed as `better-search-mcp` in `$GOPATH/bin` or `$HOME/go/bin`.
 
-### 2. Configure your MCP client
+## MCP Client Configuration
 
-Add to your MCP configuration file:
+### OpenCode
 
-**For OpenCode:**
 ```json
 {
   "mcp": {
@@ -39,14 +37,16 @@ Add to your MCP configuration file:
       "command": ["$HOME/go/bin/better-search-mcp"],
       "environment": {
         "SEARXNG_URL": "http://localhost:8888",
-        "BYPARR_URL": "http://localhost:8191"
+        "BYPARR_URL": "http://localhost:8191",
+        "LOG_LEVEL": "INFO"
       }
     }
   }
 }
 ```
 
-**For Claude Code (.claude.json):**
+### Claude Code
+
 ```json
 {
   "mcpServers": {
@@ -54,66 +54,182 @@ Add to your MCP configuration file:
       "command": "$HOME/go/bin/better-search-mcp",
       "env": {
         "SEARXNG_URL": "http://localhost:8888",
-        "BYPARR_URL": "http://localhost:8191"
+        "BYPARR_URL": "http://localhost:8191",
+        "LOG_LEVEL": "INFO"
       }
     }
   }
 }
 ```
 
-> **Note:** Replace `$HOME` with your actual home directory path if your client doesn't expand environment variables.
-
-## Build from Source
-
-Requires [Go](https://go.dev/) 1.23+:
+## Build From Source
 
 ```bash
 git clone https://github.com/enrell/better-search-mcp.git
 cd better-search-mcp
-go build -o better-search-mcp .
+go build -o better-search-mcp ./cmd/server
 ```
 
 ## Environment Variables
 
 | Variable | Description | Default |
-|----------|-------------|---------|
-| `SEARXNG_URL` | URL of your SearXNG instance | `http://localhost:8080` |
-| `BYPARR_URL` | URL of your Byparr proxy | `http://localhost:8191` |
-| `LOG_LEVEL` | Logging verbosity (DEBUG, INFO, WARN, ERROR) | `INFO` |
-| `MCP_TIMEOUT` | Request timeout in seconds | `30` |
-| `MAX_CONCURRENT_REQUESTS` | Max parallel requests for batch fetching | `30` |
+| --- | --- | --- |
+| `SEARXNG_URL` | Base URL of your SearXNG instance. Must be `http` or `https`. | `http://localhost:8080` |
+| `BYPARR_URL` | Base URL of your Byparr instance. Must be `http` or `https`. | `http://localhost:8191` |
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARN`, or `ERROR`. | `INFO` |
+| `MCP_TIMEOUT` | Default timeout in seconds for outbound requests. | `30` |
+| `MAX_CONCURRENT_REQUESTS` | Max parallel requests for batch fetch mode. | `30` |
+
+Invalid configuration fails fast during startup.
 
 ## MCP Tools
 
 ### `searxng_web_search`
 
-Search the web using SearXNG.
+Searches SearXNG and returns:
 
-**Parameters:**
-- `query` (required): The search query
-- `num_results` (optional): Number of results (default: 10)
-- `language` (optional): Search language (default: "en")
+- `success`
+- `query`
+- `results[]` with `title`, `url`, `snippet`, and `engine`
 
-### `web_fetch`
+Parameters:
 
-Fetch and extract content from web pages. Supports single URL or batch fetching.
+- `query` required string
+- `num_results` optional number between `1` and `50`
+- `language` optional string, defaults to `en`
 
-**Parameters:**
-- `url` (optional): The URL to fetch
-- `urls` (optional): Array of URLs to fetch in parallel
-- `include_metadata` (optional): Include metadata (default: true)
+Example:
 
-**Batch Fetching Example:**
 ```json
 {
-  "urls": [
-    "https://example.com/article1",
-    "https://example.com/article2",
-    "https://example.com/article3"
-  ]
+  "query": "golang mcp server",
+  "num_results": 5,
+  "language": "en"
 }
 ```
 
+### `web_fetch`
+
+Fetches a single URL or a batch of URLs, extracts readable content, and converts it to Markdown.
+
+Parameters:
+
+- `url` optional string
+- `urls` optional string array up to `25` items
+- `include_metadata` optional boolean, defaults to `true`
+- `timeout_seconds` optional number between `1` and `120`
+- `max_content_chars` optional number for truncation
+- `preserve_links` optional boolean, defaults to `true`
+- `raw_html` optional boolean, defaults to `false`
+- `prefer_readable_text` optional boolean, defaults to `true`
+- `fail_fast` optional boolean for batch mode, defaults to `false`
+
+Rules:
+
+- Provide either `url` or `urls`, never both
+- URLs must be valid `http` or `https`
+- Duplicate batch URLs are removed automatically
+
+Example, single fetch:
+
+```json
+{
+  "url": "https://example.com/article",
+  "include_metadata": true,
+  "raw_html": true,
+  "preserve_links": false,
+  "max_content_chars": 4000
+}
+```
+
+Example, batch fetch:
+
+```json
+{
+  "urls": [
+    "https://example.com/article-1",
+    "https://example.com/article-2",
+    "https://example.com/article-3"
+  ],
+  "timeout_seconds": 20,
+  "fail_fast": true
+}
+```
+
+## Response Shape
+
+Each tool call returns:
+
+- `content` with a JSON string for backwards compatibility
+- `structuredContent` with the parsed result object
+- `_meta` with tool metadata and schema version
+
+Errors use a consistent shape inside `structuredContent`:
+
+```json
+{
+  "success": false,
+  "tool": "web_fetch",
+  "error": {
+    "code": "tool_error",
+    "message": "..."
+  },
+  "generatedAt": "2026-04-18T12:00:00Z"
+}
+```
+
+## Development
+
+Run tests:
+
+```bash
+GOCACHE=/tmp/go-build go test ./...
+```
+
+Run locally with custom endpoints:
+
+```bash
+SEARXNG_URL=http://localhost:8888 \
+BYPARR_URL=http://localhost:8191 \
+LOG_LEVEL=DEBUG \
+go run ./cmd/server
+```
+
+## Project Structure
+
+```text
+cmd/server/            binary entrypoint
+internal/clients/      HTTP clients for SearXNG and Byparr
+internal/config/       config loading and validation
+internal/extractor/    content extraction and Markdown rendering
+internal/mcp/          JSON-RPC / MCP server and tool registry
+internal/tools/        tool orchestration and response models
+```
+
+## Troubleshooting
+
+### Startup fails with configuration error
+
+Check that `SEARXNG_URL` and `BYPARR_URL` are valid `http` or `https` base URLs with a host.
+
+### `searxng_web_search` returns `success=false`
+
+- Confirm SearXNG is reachable from the MCP process
+- Verify the `/search?format=json` endpoint works manually
+- Check logs with `LOG_LEVEL=DEBUG`
+
+### `web_fetch` returns `Byparr error`
+
+- Confirm Byparr is reachable at `BYPARR_URL`
+- Verify Byparr can fetch the target page outside MCP
+- Increase `timeout_seconds` for slower pages
+
+### Extracted Markdown is incomplete
+
+- Set `prefer_readable_text=false` to use the broader page HTML
+- Set `raw_html=true` to inspect what was actually extracted
+- Some highly dynamic pages may still degrade because the server only sees fetched HTML, not a browser DOM after client-side rendering
+
 ## License
 
-MIT License - see [LICENSE](LICENSE) file
+MIT. See [LICENSE](LICENSE).
