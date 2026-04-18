@@ -1,204 +1,265 @@
 package extractor
 
 import (
-	"fmt"
-	"regexp"
+	"bytes"
+	"strconv"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
+type markdownRenderer struct {
+	builder bytes.Buffer
+}
+
 func HTMLToMarkdown(htmlStr string) string {
-	md := htmlStr
-
-	md = processPreCode(md)
-	md = processHeaders(md)
-	md = processLists(md)
-	md = processLinks(md)
-	md = processImages(md)
-	md = processBoldItalic(md)
-	md = processBlockquotes(md)
-	md = processParagraphs(md)
-	md = processLineBreaks(md)
-	md = cleanWhitespace(md)
-
-	return md
-}
-
-func processPreCode(html string) string {
-	preRe := regexp.MustCompile(`(?is)<pre[^>]*>(.*?)</pre>`)
-	html = preRe.ReplaceAllStringFunc(html, func(match string) string {
-		inner := preRe.FindStringSubmatch(match)
-		if len(inner) > 1 {
-			content := stripTags(inner[1])
-			return fmt.Sprintf("\n```\n%s\n```\n", content)
-		}
-		return match
-	})
-
-	codeRe := regexp.MustCompile(`(?is)<code[^>]*>(.*?)</code>`)
-	html = codeRe.ReplaceAllStringFunc(html, func(match string) string {
-		inner := codeRe.FindStringSubmatch(match)
-		if len(inner) > 1 {
-			content := stripTags(inner[1])
-			if strings.Contains(content, "\n") {
-				return fmt.Sprintf("\n```\n%s\n```\n", content)
-			}
-			return fmt.Sprintf("`%s`", content)
-		}
-		return match
-	})
-
-	return html
-}
-
-func processHeaders(html string) string {
-	for level := 6; level >= 1; level-- {
-		prefix := strings.Repeat("#", level)
-		re := regexp.MustCompile(fmt.Sprintf(`(?is)<h%d[^>]*>(.*?)</h%d>`, level, level))
-		html = re.ReplaceAllStringFunc(html, func(match string) string {
-			inner := re.FindStringSubmatch(match)
-			if len(inner) > 1 {
-				content := stripTags(inner[1])
-				return fmt.Sprintf("\n%s %s\n\n", prefix, content)
-			}
-			return match
-		})
+	if strings.TrimSpace(htmlStr) == "" {
+		return ""
 	}
-	return html
+
+	root := &html.Node{Type: html.ElementNode, Data: "div"}
+	nodes, err := html.ParseFragment(strings.NewReader(htmlStr), root)
+	if err != nil {
+		return strings.TrimSpace(stripTags(htmlStr))
+	}
+
+	for _, node := range nodes {
+		root.AppendChild(node)
+	}
+
+	renderer := &markdownRenderer{}
+	renderer.renderChildren(root, 0)
+	return cleanWhitespace(renderer.builder.String())
 }
 
-func processLists(html string) string {
-	html = regexp.MustCompile(`(?is)<ul[^>]*>`).ReplaceAllString(html, "\n")
-	html = regexp.MustCompile(`(?is)</ul>`).ReplaceAllString(html, "\n")
-	html = regexp.MustCompile(`(?is)<ol[^>]*>`).ReplaceAllString(html, "\n")
-	html = regexp.MustCompile(`(?is)</ol>`).ReplaceAllString(html, "\n")
-
-	html = regexp.MustCompile(`(?is)<li[^>]*>(.*?)</li>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<li[^>]*>(.*?)</li>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			content := strings.TrimSpace(stripTags(inner[1]))
-			return fmt.Sprintf("- %s\n", content)
-		}
-		return match
-	})
-
-	return html
+func (r *markdownRenderer) renderChildren(node *html.Node, listDepth int) {
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		r.renderNode(child, listDepth)
+	}
 }
 
-func processLinks(html string) string {
-	return regexp.MustCompile(`(?is)<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)</a>`).ReplaceAllStringFunc(html, func(match string) string {
-		parts := regexp.MustCompile(`(?is)<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)</a>`).FindStringSubmatch(match)
-		if len(parts) > 2 {
-			url := parts[1]
-			text := stripTags(parts[2])
-			return fmt.Sprintf("[%s](%s)", text, url)
+func (r *markdownRenderer) renderNode(node *html.Node, listDepth int) {
+	switch node.Type {
+	case html.TextNode:
+		text := normalizeText(node.Data)
+		if text != "" {
+			r.builder.WriteString(text)
 		}
-		return match
-	})
-}
-
-func processImages(html string) string {
-	html = regexp.MustCompile(`(?is)<img[^>]*src=["']([^"']*)["'][^>]*alt=["']([^"']*)["'][^>]*/?>`).ReplaceAllStringFunc(html, func(match string) string {
-		parts := regexp.MustCompile(`(?is)<img[^>]*src=["']([^"']*)["'][^>]*alt=["']([^"']*)["'][^>]*/?>`).FindStringSubmatch(match)
-		if len(parts) > 2 {
-			return fmt.Sprintf("![%s](%s)", parts[2], parts[1])
-		}
-		return match
-	})
-
-	html = regexp.MustCompile(`(?is)<img[^>]*src=["']([^"']*)["'][^>]*/?>`).ReplaceAllStringFunc(html, func(match string) string {
-		parts := regexp.MustCompile(`(?is)<img[^>]*src=["']([^"']*)["'][^>]*/?>`).FindStringSubmatch(match)
-		if len(parts) > 1 {
-			return fmt.Sprintf("![](%s)", parts[1])
-		}
-		return match
-	})
-
-	return html
-}
-
-func processBoldItalic(html string) string {
-	html = regexp.MustCompile(`(?is)<strong[^>]*>(.*?)</strong>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<strong[^>]*>(.*?)</strong>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			return fmt.Sprintf("**%s**", stripTags(inner[1]))
-		}
-		return match
-	})
-
-	html = regexp.MustCompile(`(?is)<b[^>]*>(.*?)</b>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<b[^>]*>(.*?)</b>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			return fmt.Sprintf("**%s**", stripTags(inner[1]))
-		}
-		return match
-	})
-
-	html = regexp.MustCompile(`(?is)<em[^>]*>(.*?)</em>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<em[^>]*>(.*?)</em>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			return fmt.Sprintf("*%s*", stripTags(inner[1]))
-		}
-		return match
-	})
-
-	html = regexp.MustCompile(`(?is)<i[^>]*>(.*?)</i>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<i[^>]*>(.*?)</i>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			return fmt.Sprintf("*%s*", stripTags(inner[1]))
-		}
-		return match
-	})
-
-	return html
-}
-
-func processBlockquotes(html string) string {
-	return regexp.MustCompile(`(?is)<blockquote[^>]*>(.*?)</blockquote>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<blockquote[^>]*>(.*?)</blockquote>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			content := stripTags(inner[1])
+	case html.ElementNode:
+		switch node.Data {
+		case "h1", "h2", "h3", "h4", "h5", "h6":
+			level := int(node.Data[1] - '0')
+			r.block(strings.Repeat("#", level) + " " + strings.TrimSpace(r.inline(node)))
+		case "p":
+			content := strings.TrimSpace(r.inline(node))
+			if content != "" {
+				r.block(content)
+			}
+		case "br":
+			r.builder.WriteByte('\n')
+		case "blockquote":
+			content := strings.TrimSpace(r.inline(node))
+			if content == "" {
+				return
+			}
 			lines := strings.Split(content, "\n")
 			for i, line := range lines {
-				lines[i] = "> " + line
+				lines[i] = "> " + strings.TrimSpace(line)
 			}
-			return strings.Join(lines, "\n")
-		}
-		return match
-	})
-}
-
-func processParagraphs(html string) string {
-	return regexp.MustCompile(`(?is)<p[^>]*>(.*?)</p>`).ReplaceAllStringFunc(html, func(match string) string {
-		inner := regexp.MustCompile(`(?is)<p[^>]*>(.*?)</p>`).FindStringSubmatch(match)
-		if len(inner) > 1 {
-			content := strings.TrimSpace(stripTags(inner[1]))
+			r.block(strings.Join(lines, "\n"))
+		case "pre":
+			content := strings.TrimSpace(r.inline(node))
 			if content != "" {
-				return content + "\n\n"
+				r.block("```\n" + content + "\n```")
 			}
+		case "ul":
+			r.renderList(node, listDepth, false)
+			r.builder.WriteByte('\n')
+		case "ol":
+			r.renderList(node, listDepth, true)
+			r.builder.WriteByte('\n')
+		case "hr":
+			r.block("---")
+		default:
+			r.renderChildren(node, listDepth)
 		}
-		return match
-	})
+	}
 }
 
-func processLineBreaks(html string) string {
-	return regexp.MustCompile(`(?is)<br\s*/?>`).ReplaceAllString(html, "\n")
+func (r *markdownRenderer) renderList(node *html.Node, listDepth int, ordered bool) {
+	index := 1
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type != html.ElementNode || child.Data != "li" {
+			continue
+		}
+
+		prefix := "- "
+		if ordered {
+			prefix = strconv.Itoa(index) + ". "
+		}
+		indent := strings.Repeat("  ", listDepth)
+		content, nested := renderListItem(child, listDepth+1)
+		r.builder.WriteString(indent)
+		r.builder.WriteString(prefix)
+		r.builder.WriteString(strings.TrimSpace(content))
+		r.builder.WriteByte('\n')
+		if nested != "" {
+			r.builder.WriteString(nested)
+		}
+		index++
+	}
+}
+
+func renderListItem(node *html.Node, listDepth int) (string, string) {
+	var inlineParts []string
+	var nestedBuilder strings.Builder
+
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode && (child.Data == "ul" || child.Data == "ol") {
+			renderer := &markdownRenderer{}
+			renderer.renderList(child, listDepth, child.Data == "ol")
+			nestedBuilder.WriteString(renderer.builder.String())
+			continue
+		}
+		inlineParts = append(inlineParts, renderInlineNode(child))
+	}
+
+	return strings.TrimSpace(strings.Join(inlineParts, "")), nestedBuilder.String()
+}
+
+func (r *markdownRenderer) inline(node *html.Node) string {
+	return renderInlineNode(node)
+}
+
+func renderInlineNode(node *html.Node) string {
+	switch node.Type {
+	case html.TextNode:
+		return normalizeText(node.Data)
+	case html.ElementNode:
+		switch node.Data {
+		case "strong", "b":
+			return "**" + strings.TrimSpace(renderInlineChildren(node)) + "**"
+		case "em", "i":
+			return "*" + strings.TrimSpace(renderInlineChildren(node)) + "*"
+		case "code":
+			return "`" + strings.TrimSpace(renderInlineChildren(node)) + "`"
+		case "a":
+			text := strings.TrimSpace(renderInlineChildren(node))
+			href := strings.TrimSpace(getAttr(node, "href"))
+			if href == "" {
+				return text
+			}
+			if text == "" {
+				text = href
+			}
+			return "[" + text + "](" + href + ")"
+		case "img":
+			src := strings.TrimSpace(getAttr(node, "src"))
+			if src == "" {
+				return ""
+			}
+			alt := strings.TrimSpace(getAttr(node, "alt"))
+			return "![" + alt + "](" + src + ")"
+		case "br":
+			return "\n"
+		default:
+			return renderInlineChildren(node)
+		}
+	}
+
+	return ""
+}
+
+func renderInlineChildren(node *html.Node) string {
+	var builder strings.Builder
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		builder.WriteString(renderInlineNode(child))
+	}
+	return builder.String()
+}
+
+func normalizeText(text string) string {
+	leadingSpace := len(text) > 0 && isSpace(text[0])
+	trailingSpace := len(text) > 0 && isSpace(text[len(text)-1])
+
+	text = html.UnescapeString(text)
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	text = collapseWhitespace(text)
+	if text == "" {
+		return ""
+	}
+	if leadingSpace {
+		text = " " + text
+	}
+	if trailingSpace {
+		text += " "
+	}
+	return text
+}
+
+func collapseWhitespace(text string) string {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.Join(fields, " ")
+}
+
+func (r *markdownRenderer) block(content string) {
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	if r.builder.Len() > 0 && !strings.HasSuffix(r.builder.String(), "\n\n") {
+		if strings.HasSuffix(r.builder.String(), "\n") {
+			r.builder.WriteByte('\n')
+		} else {
+			r.builder.WriteString("\n\n")
+		}
+	}
+	r.builder.WriteString(content)
+	r.builder.WriteString("\n\n")
 }
 
 func cleanWhitespace(markdown string) string {
-	markdown = regexp.MustCompile(`\n{3,}`).ReplaceAllString(markdown, "\n\n")
-	return strings.TrimSpace(markdown)
+	lines := strings.Split(markdown, "\n")
+	cleaned := make([]string, 0, len(lines))
+	blankCount := 0
+
+	for _, line := range lines {
+		line = strings.TrimRight(line, " \t")
+		if strings.TrimSpace(line) == "" {
+			blankCount++
+			if blankCount > 1 {
+				continue
+			}
+		} else {
+			blankCount = 0
+		}
+		cleaned = append(cleaned, line)
+	}
+
+	return strings.TrimSpace(strings.Join(cleaned, "\n"))
 }
 
-func stripTags(html string) string {
-	result := regexp.MustCompile(`<[^>]+>`).ReplaceAllString(html, "")
-	result = strings.ReplaceAll(result, "&nbsp;", " ")
-	result = strings.ReplaceAll(result, "&amp;", "&")
-	result = strings.ReplaceAll(result, "&lt;", "<")
-	result = strings.ReplaceAll(result, "&gt;", ">")
-	result = strings.ReplaceAll(result, "&quot;", "\"")
-	result = strings.ReplaceAll(result, "&#39;", "'")
-	result = strings.ReplaceAll(result, "&mdash;", "—")
-	result = strings.ReplaceAll(result, "&ndash;", "–")
-	result = strings.ReplaceAll(result, "&hellip;", "…")
-	return result
+func stripTags(htmlStr string) string {
+	var builder strings.Builder
+	tokenizer := html.NewTokenizer(strings.NewReader(htmlStr))
+
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			return html.UnescapeString(builder.String())
+		case html.TextToken:
+			builder.WriteString(tokenizer.Token().Data)
+		}
+	}
+}
+
+func isSpace(b byte) bool {
+	switch b {
+	case ' ', '\n', '\r', '\t':
+		return true
+	default:
+		return false
+	}
 }
