@@ -17,6 +17,7 @@ var removeTags = map[string]bool{
 
 var boostClasses = []string{"content", "article", "post", "entry", "main", "text", "body"}
 var penaltyClasses = []string{"comment", "sidebar", "footer", "header", "nav", "menu", "widget", "ad", "advertisement", "social", "share"}
+var candidateTags = map[string]bool{"article": true, "main": true, "section": true, "div": true}
 
 type Metadata struct {
 	Title    string `json:"title"`
@@ -200,27 +201,20 @@ func findMainContent(doc *html.Node) string {
 
 	var candidates []candidate
 
-	if article := findFirstNode(doc, func(n *html.Node) bool {
-		return n.Type == html.ElementNode && n.Data == "article"
-	}); article != nil {
-		candidates = append(candidates, candidate{article, calculateScore(article)})
-	}
-
-	if main := findFirstNode(doc, func(n *html.Node) bool {
-		return n.Type == html.ElementNode && n.Data == "main"
-	}); main != nil {
-		candidates = append(candidates, candidate{main, calculateScore(main)})
-	}
-
 	walkNodes(doc, func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "div" {
-			if getAttr(n, "role") == "main" {
-				candidates = append(candidates, candidate{n, calculateScore(n)})
-			} else {
-				score := divCandidateScore(n)
-				if score != nil {
-					candidates = append(candidates, candidate{n, *score})
-				}
+		if n.Type != html.ElementNode || !candidateTags[n.Data] {
+			return
+		}
+
+		switch {
+		case n.Data == "article" || n.Data == "main":
+			candidates = append(candidates, candidate{n, calculateScore(n)})
+		case getAttr(n, "role") == "main":
+			candidates = append(candidates, candidate{n, calculateScore(n)})
+		default:
+			score := divCandidateScore(n)
+			if score != nil {
+				candidates = append(candidates, candidate{n, *score})
 			}
 		}
 	})
@@ -303,6 +297,19 @@ func calculateScore(node *html.Node) float64 {
 
 	score := textDensity * 10.0
 	score += math.Log(float64(textLength)) / 2.0
+	score += float64(countTags(node, "p")) * 1.5
+	score += float64(countTags(node, "h2")+countTags(node, "h3")) * 0.75
+	score += float64(countPunctuation(text)) / 120.0
+
+	if countTags(node, "p") == 0 {
+		score -= 2.5
+	}
+	if textLength < 200 {
+		score -= 3.0
+	}
+	if linkDensity > 0.35 {
+		score -= 4.0
+	}
 
 	return score
 }
@@ -325,6 +332,27 @@ func cleanContent(text string) string {
 	text = newlineRe.ReplaceAllString(text, "\n\n")
 
 	return strings.TrimSpace(text)
+}
+
+func countTags(node *html.Node, tag string) int {
+	total := 0
+	walkNodes(node, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == tag {
+			total++
+		}
+	})
+	return total
+}
+
+func countPunctuation(text string) int {
+	total := 0
+	for _, r := range text {
+		switch r {
+		case '.', ',', ';', ':', '!', '?':
+			total++
+		}
+	}
+	return total
 }
 
 func getAttr(n *html.Node, key string) string {
