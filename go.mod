@@ -1,4 +1,4 @@
-module github.com/enrell/better-search-mcp
+module github.com/enrell/better-search
 
 go 1.23
 

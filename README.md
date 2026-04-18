@@ -22,10 +22,10 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server writte
 ### Option 1: Install with Go
 
 ```bash
-go install github.com/enrell/better-search-mcp@latest
+go install github.com/enrell/better-search@latest
 ```
 
-The binary is installed as `better-search-mcp` in `$GOPATH/bin` or `$HOME/go/bin`.
+The binary is installed as `better-search` in `$GOPATH/bin` or `$HOME/go/bin`.
 
 ### Option 2: Install with a Code Agent
 
@@ -68,7 +68,7 @@ Requirements:
    - Verify SearXNG responds successfully on its configured local URL
    - Verify Byparr responds successfully on its configured local URL
 10. Only after both services are confirmed healthy, install this MCP:
-   - go install github.com/enrell/better-search-mcp@latest
+   - go install github.com/enrell/better-search@latest
 11. Then configure the MCP for my installed code agents. Detect which coding agents I use and update their MCP config files if possible. At minimum, check for:
    - Claude Code
    - OpenCode
@@ -106,7 +106,7 @@ Implementation details:
   "mcp": {
     "better-search": {
       "type": "local",
-      "command": ["$HOME/go/bin/better-search-mcp"],
+      "command": ["$HOME/go/bin/better-search"],
       "environment": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191",
@@ -123,7 +123,7 @@ Implementation details:
 {
   "mcpServers": {
     "better-search": {
-      "command": "$HOME/go/bin/better-search-mcp",
+      "command": "$HOME/go/bin/better-search",
       "env": {
         "SEARXNG_URL": "http://localhost:8888",
         "BYPARR_URL": "http://localhost:8191",
@@ -137,9 +137,9 @@ Implementation details:
 ## Build From Source
 
 ```bash
-git clone https://github.com/enrell/better-search-mcp.git
-cd better-search-mcp
-go build -o better-search-mcp ./cmd/server
+git clone https://github.com/enrell/better-search.git
+cd better-search
+go build -o better-search ./cmd/server
 ```
 
 ## Environment Variables

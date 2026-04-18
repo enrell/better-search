@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/enrell/better-search-mcp/internal/clients/byparr"
-	"github.com/enrell/better-search-mcp/internal/clients/searxng"
-	"github.com/enrell/better-search-mcp/internal/config"
+	"github.com/enrell/better-search/internal/clients/byparr"
+	"github.com/enrell/better-search/internal/clients/searxng"
+	"github.com/enrell/better-search/internal/config"
 )
 
 type fakeSearxngClient struct {

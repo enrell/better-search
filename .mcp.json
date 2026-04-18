@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "better-search": {
-      "command": "/home/kokoro/btw/lab/searxng-web-fetch-mcp/bin/better-search-mcp",
+      "command": "/home/kokoro/btw/lab/searxng-web-fetch-mcp/bin/better-search",
       "args": [],
       "env": {
         "SEARXNG_URL": "http://localhost:8888",

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/enrell/better-search-mcp/internal/config"
+	"github.com/enrell/better-search/internal/config"
 )
 
 const version = "0.3.0"
@@ -86,7 +86,7 @@ func (s *server) handleRequest(data []byte) {
 				"tools": map[string]interface{}{},
 			},
 			"serverInfo": map[string]interface{}{
-				"name":    "better-search-mcp",
+				"name":    "better-search",
 				"version": version,
 			},
 		}

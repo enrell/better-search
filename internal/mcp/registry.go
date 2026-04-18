@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/enrell/better-search-mcp/internal/config"
-	"github.com/enrell/better-search-mcp/internal/tools"
+	"github.com/enrell/better-search/internal/config"
+	"github.com/enrell/better-search/internal/tools"
 )
 
 func getToolsList() []toolDefinition {

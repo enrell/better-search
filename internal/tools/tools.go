@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/enrell/better-search-mcp/internal/clients/byparr"
-	"github.com/enrell/better-search-mcp/internal/clients/searxng"
-	"github.com/enrell/better-search-mcp/internal/config"
-	"github.com/enrell/better-search-mcp/internal/extractor"
+	"github.com/enrell/better-search/internal/clients/byparr"
+	"github.com/enrell/better-search/internal/clients/searxng"
+	"github.com/enrell/better-search/internal/config"
+	"github.com/enrell/better-search/internal/extractor"
 )
 
 const (
