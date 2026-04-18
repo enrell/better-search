@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -37,11 +38,13 @@ type SearchResponse struct {
 }
 
 type FetchResult struct {
-	Success  bool      `json:"success"`
-	URL      string    `json:"url"`
-	Text     string    `json:"text,omitempty"`
-	Error    string    `json:"error,omitempty"`
-	Metadata *Metadata `json:"metadata,omitempty"`
+	Success   bool      `json:"success"`
+	URL       string    `json:"url"`
+	Text      string    `json:"text,omitempty"`
+	RawHTML   string    `json:"raw_html,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Metadata  *Metadata `json:"metadata,omitempty"`
+	Truncated bool      `json:"truncated,omitempty"`
 }
 
 type Metadata struct {
@@ -56,6 +59,16 @@ type BatchFetchResponse struct {
 	Success bool          `json:"success"`
 	Count   int           `json:"count"`
 	Results []FetchResult `json:"results"`
+}
+
+type FetchOptions struct {
+	IncludeMetadata    bool
+	TimeoutSeconds     int
+	MaxContentChars    int
+	PreserveLinks      bool
+	RawHTML            bool
+	PreferReadableText bool
+	FailFast           bool
 }
 
 func Search(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
@@ -85,9 +98,9 @@ func Search(cfg config.Config, arguments map[string]interface{}) (interface{}, e
 }
 
 func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
-	includeMetadata := true
-	if im, ok := arguments["include_metadata"].(bool); ok {
-		includeMetadata = im
+	options, err := parseFetchOptions(cfg, arguments)
+	if err != nil {
+		return nil, err
 	}
 
 	urlStr, hasURL := arguments["url"].(string)
@@ -107,7 +120,7 @@ func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, er
 	}
 
 	if len(urls) > 0 {
-		return fetchBatch(cfg, urls, includeMetadata), nil
+		return fetchBatch(cfg, urls, options), nil
 	}
 
 	if hasURL {
@@ -118,7 +131,7 @@ func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, er
 		if err != nil {
 			return nil, fmt.Errorf("'url' is invalid: %w", err)
 		}
-		return fetchSingleResult(cfg, normalizedURL, includeMetadata), nil
+		return fetchSingleResult(cfg, normalizedURL, options), nil
 	}
 
 	if _, ok := arguments["urls"]; ok {
@@ -126,6 +139,46 @@ func Fetch(cfg config.Config, arguments map[string]interface{}) (interface{}, er
 	}
 
 	return nil, fmt.Errorf("either 'url' or 'urls' parameter is required")
+}
+
+func parseFetchOptions(cfg config.Config, arguments map[string]interface{}) (FetchOptions, error) {
+	options := FetchOptions{
+		IncludeMetadata:    true,
+		TimeoutSeconds:     cfg.MCPTimeout,
+		PreserveLinks:      true,
+		PreferReadableText: true,
+	}
+
+	if im, ok := arguments["include_metadata"].(bool); ok {
+		options.IncludeMetadata = im
+	}
+	if v, ok := arguments["preserve_links"].(bool); ok {
+		options.PreserveLinks = v
+	}
+	if v, ok := arguments["raw_html"].(bool); ok {
+		options.RawHTML = v
+	}
+	if v, ok := arguments["prefer_readable_text"].(bool); ok {
+		options.PreferReadableText = v
+	}
+	if v, ok := arguments["fail_fast"].(bool); ok {
+		options.FailFast = v
+	}
+	if v, ok := arguments["timeout_seconds"].(float64); ok {
+		options.TimeoutSeconds = int(v)
+	}
+	if v, ok := arguments["max_content_chars"].(float64); ok {
+		options.MaxContentChars = int(v)
+	}
+
+	if options.TimeoutSeconds < 1 || options.TimeoutSeconds > 120 {
+		return FetchOptions{}, fmt.Errorf("'timeout_seconds' must be between 1 and 120")
+	}
+	if options.MaxContentChars < 0 {
+		return FetchOptions{}, fmt.Errorf("'max_content_chars' cannot be negative")
+	}
+
+	return options, nil
 }
 
 func normalizeURLBatch(urlsRaw []interface{}) ([]string, error) {
@@ -217,10 +270,26 @@ func searchSearXNG(cfg config.Config, query string, numResults int, language str
 	}, nil
 }
 
-func fetchBatch(cfg config.Config, urls []string, includeMetadata bool) BatchFetchResponse {
+func fetchBatch(cfg config.Config, urls []string, options FetchOptions) BatchFetchResponse {
 	maxConcurrent := cfg.MaxConcurrentRequests
 	if maxConcurrent <= 0 {
 		maxConcurrent = 10
+	}
+
+	if options.FailFast {
+		results := make([]FetchResult, 0, len(urls))
+		for _, rawURL := range urls {
+			result := fetchSingleResult(cfg, rawURL, options)
+			results = append(results, result)
+			if !result.Success {
+				break
+			}
+		}
+		return BatchFetchResponse{
+			Success: len(results) == len(urls),
+			Count:   len(results),
+			Results: results,
+		}
 	}
 
 	semaphore := make(chan struct{}, maxConcurrent)
@@ -233,21 +302,29 @@ func fetchBatch(cfg config.Config, urls []string, includeMetadata bool) BatchFet
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			results[idx] = fetchSingleResult(cfg, rawURL, includeMetadata)
+			results[idx] = fetchSingleResult(cfg, rawURL, options)
 		}(i, u)
 	}
 
 	wg.Wait()
 
+	allSuccessful := true
+	for _, result := range results {
+		if !result.Success {
+			allSuccessful = false
+			break
+		}
+	}
+
 	return BatchFetchResponse{
-		Success: true,
+		Success: allSuccessful,
 		Count:   len(results),
 		Results: results,
 	}
 }
 
-func fetchSingleResult(cfg config.Config, rawURL string, includeMetadata bool) FetchResult {
-	html, err := fetchViaByparr(cfg, rawURL)
+func fetchSingleResult(cfg config.Config, rawURL string, options FetchOptions) FetchResult {
+	html, err := fetchViaByparr(withTimeout(cfg, options.TimeoutSeconds), rawURL)
 	if err != nil {
 		return FetchResult{
 			Success: false,
@@ -265,15 +342,33 @@ func fetchSingleResult(cfg config.Config, rawURL string, includeMetadata bool) F
 	}
 
 	extractionResult := extractor.Extract(html)
-	markdown := extractor.HTMLToMarkdown(extractionResult.Text)
-
-	result := FetchResult{
-		Success: true,
-		URL:     rawURL,
-		Text:    markdown,
+	contentSource := extractionResult.ContentHTML
+	if !options.PreferReadableText || strings.TrimSpace(contentSource) == "" {
+		contentSource = html
 	}
 
-	if includeMetadata {
+	markdown := extractor.HTMLToMarkdown(contentSource)
+	if !options.PreserveLinks {
+		markdown = stripMarkdownLinks(markdown)
+	}
+
+	rawHTML := ""
+	if options.RawHTML {
+		rawHTML = contentSource
+	}
+
+	text, textTruncated := truncateContent(markdown, options.MaxContentChars)
+	rawHTML, htmlTruncated := truncateContent(rawHTML, options.MaxContentChars)
+
+	result := FetchResult{
+		Success:   true,
+		URL:       rawURL,
+		Text:      text,
+		RawHTML:   rawHTML,
+		Truncated: textTruncated || htmlTruncated,
+	}
+
+	if options.IncludeMetadata {
 		result.Metadata = &Metadata{
 			Title:    extractionResult.Title,
 			Author:   extractionResult.Author,
@@ -314,4 +409,34 @@ func newHTTPClient(cfg config.Config) *http.Client {
 	return &http.Client{
 		Timeout: time.Duration(cfg.MCPTimeout) * time.Second,
 	}
+}
+
+func withTimeout(cfg config.Config, timeoutSeconds int) config.Config {
+	cfg.MCPTimeout = timeoutSeconds
+	return cfg
+}
+
+var markdownLinkPattern = regexp.MustCompile(`!?\[([^\]]*)\]\(([^)]+)\)`)
+
+func stripMarkdownLinks(markdown string) string {
+	return markdownLinkPattern.ReplaceAllStringFunc(markdown, func(match string) string {
+		parts := markdownLinkPattern.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		if strings.HasPrefix(match, "![") {
+			return parts[1]
+		}
+		return parts[1]
+	})
+}
+
+func truncateContent(content string, maxChars int) (string, bool) {
+	if maxChars <= 0 || len(content) <= maxChars {
+		return content, false
+	}
+	if maxChars <= 3 {
+		return content[:maxChars], true
+	}
+	return content[:maxChars-3] + "...", true
 }

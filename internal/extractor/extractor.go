@@ -28,12 +28,13 @@ type Metadata struct {
 }
 
 type ExtractionResult struct {
-	Title    string
-	Text     string
-	Author   string
-	Date     string
-	Language string
-	URL      string
+	Title       string
+	Text        string
+	ContentHTML string
+	Author      string
+	Date        string
+	Language    string
+	URL         string
 }
 
 func Extract(htmlStr string) ExtractionResult {
@@ -44,16 +45,28 @@ func Extract(htmlStr string) ExtractionResult {
 
 	removeUnwantedNodes(doc)
 	meta := extractMetadata(doc)
-	mainContent := findMainContent(doc)
+	mainNode := findMainContentNode(doc)
+	mainContent := ""
+	mainHTML := ""
+	if mainNode != nil {
+		mainContent = getTextContent(mainNode)
+		mainHTML = renderNodeHTML(mainNode)
+	} else if body := findFirstNode(doc, func(n *html.Node) bool {
+		return n.Type == html.ElementNode && n.Data == "body"
+	}); body != nil {
+		mainContent = getTextContent(body)
+		mainHTML = renderNodeHTML(body)
+	}
 	cleaned := cleanContent(mainContent)
 
 	return ExtractionResult{
-		Title:    meta.Title,
-		Text:     cleaned,
-		Author:   meta.Author,
-		Date:     meta.Date,
-		Language: meta.Language,
-		URL:      meta.URL,
+		Title:       meta.Title,
+		Text:        cleaned,
+		ContentHTML: mainHTML,
+		Author:      meta.Author,
+		Date:        meta.Date,
+		Language:    meta.Language,
+		URL:         meta.URL,
 	}
 }
 
@@ -193,7 +206,7 @@ func extractURL(doc *html.Node) string {
 	return ""
 }
 
-func findMainContent(doc *html.Node) string {
+func findMainContentNode(doc *html.Node) *html.Node {
 	type candidate struct {
 		node  *html.Node
 		score float64
@@ -220,12 +233,9 @@ func findMainContent(doc *html.Node) string {
 	})
 
 	if len(candidates) == 0 {
-		if body := findFirstNode(doc, func(n *html.Node) bool {
+		return findFirstNode(doc, func(n *html.Node) bool {
 			return n.Type == html.ElementNode && n.Data == "body"
-		}); body != nil {
-			return getTextContent(body)
-		}
-		return ""
+		})
 	}
 
 	best := candidates[0]
@@ -235,7 +245,7 @@ func findMainContent(doc *html.Node) string {
 		}
 	}
 
-	return getTextContent(best.node)
+	return best.node
 }
 
 func divCandidateScore(div *html.Node) *float64 {
@@ -353,6 +363,14 @@ func countPunctuation(text string) int {
 		}
 	}
 	return total
+}
+
+func renderNodeHTML(node *html.Node) string {
+	var buf bytes.Buffer
+	if err := html.Render(&buf, node); err != nil {
+		return ""
+	}
+	return buf.String()
 }
 
 func getAttr(n *html.Node, key string) string {

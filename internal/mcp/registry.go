@@ -55,6 +55,34 @@ func getToolsList() []toolDefinition {
 						"description": "Include metadata like title, author, date (default: true)",
 						"default":     true,
 					},
+					"timeout_seconds": map[string]interface{}{
+						"type":        "number",
+						"description": "Per-request timeout in seconds between 1 and 120 (default: server MCP timeout)",
+					},
+					"max_content_chars": map[string]interface{}{
+						"type":        "number",
+						"description": "Maximum number of characters returned for text/raw_html (default: unlimited)",
+					},
+					"preserve_links": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Keep Markdown links in extracted text (default: true)",
+						"default":     true,
+					},
+					"raw_html": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Include extracted raw HTML in the result (default: false)",
+						"default":     false,
+					},
+					"prefer_readable_text": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Prefer article-focused extracted content over the full page body (default: true)",
+						"default":     true,
+					},
+					"fail_fast": map[string]interface{}{
+						"type":        "boolean",
+						"description": "In batch mode, stop after the first failed fetch (default: false)",
+						"default":     false,
+					},
 				},
 			},
 		},
