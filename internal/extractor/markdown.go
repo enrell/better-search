@@ -17,18 +17,20 @@ func HTMLToMarkdown(htmlStr string) string {
 		return ""
 	}
 
-	root := &html.Node{Type: html.ElementNode, Data: "div"}
-	nodes, err := html.ParseFragment(strings.NewReader(htmlStr), root)
+	doc, err := html.Parse(strings.NewReader("<html><body>" + htmlStr + "</body></html>"))
 	if err != nil {
 		return strings.TrimSpace(stripTags(htmlStr))
 	}
 
-	for _, node := range nodes {
-		root.AppendChild(node)
+	renderer := &markdownRenderer{}
+	body := findFirstNode(doc, func(n *html.Node) bool {
+		return n.Type == html.ElementNode && n.Data == "body"
+	})
+	if body == nil {
+		return strings.TrimSpace(stripTags(htmlStr))
 	}
 
-	renderer := &markdownRenderer{}
-	renderer.renderChildren(root, 0)
+	renderer.renderChildren(body, 0)
 	return cleanWhitespace(renderer.builder.String())
 }
 

@@ -71,6 +71,22 @@ type FetchOptions struct {
 	FailFast           bool
 }
 
+type searxngSearcher interface {
+	Search(ctx context.Context, query string, numResults int, language string) (searxng.SearchResponse, error)
+}
+
+type byparrFetcher interface {
+	Fetch(ctx context.Context, rawURL string, timeoutMillis int) (byparr.Response, error)
+}
+
+var searxngClientFactory = func(cfg config.Config) searxngSearcher {
+	return searxng.NewClient(cfg.SearxngURL, newHTTPClient(cfg))
+}
+
+var byparrClientFactory = func(cfg config.Config) byparrFetcher {
+	return byparr.NewClient(cfg.ByparrURL, newHTTPClient(cfg))
+}
+
 func Search(cfg config.Config, arguments map[string]interface{}) (interface{}, error) {
 	query, ok := arguments["query"].(string)
 	query = strings.TrimSpace(query)
@@ -237,7 +253,7 @@ func searchSearXNG(cfg config.Config, query string, numResults int, language str
 	defer cancel()
 	startedAt := time.Now()
 
-	client := searxng.NewClient(cfg.SearxngURL, newHTTPClient(cfg))
+	client := searxngClientFactory(cfg)
 	resp, err := client.Search(ctx, query, numResults, language)
 	if err != nil {
 		cfg.LogAttrs("WARN", "searxng search failed", map[string]interface{}{
@@ -386,7 +402,7 @@ func fetchViaByparr(cfg config.Config, rawURL string) (string, error) {
 	defer cancel()
 	startedAt := time.Now()
 
-	client := byparr.NewClient(cfg.ByparrURL, newHTTPClient(cfg))
+	client := byparrClientFactory(cfg)
 	resp, err := client.Fetch(ctx, rawURL, cfg.MCPTimeout*1000)
 	if err != nil {
 		cfg.LogAttrs("WARN", "byparr fetch failed", map[string]interface{}{
