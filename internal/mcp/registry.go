@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/enrell/better-search-mcp/internal/config"
 	"github.com/enrell/better-search-mcp/internal/tools"
@@ -63,7 +64,7 @@ func getToolsList() []toolDefinition {
 func handleToolCall(cfg config.Config, params map[string]interface{}) (callToolResult, bool) {
 	toolName, ok := params["name"].(string)
 	if !ok {
-		return makeErrorResult("Missing 'name' parameter"), true
+		return makeErrorResult("unknown", "invalid_request", "Missing 'name' parameter", nil), true
 	}
 
 	arguments, ok := params["arguments"].(map[string]interface{})
@@ -80,30 +81,55 @@ func handleToolCall(cfg config.Config, params map[string]interface{}) (callToolR
 	case "web_fetch":
 		result, err = tools.Fetch(cfg, arguments)
 	default:
-		return makeErrorResult(fmt.Sprintf("Unknown tool: %s", toolName)), true
+		return makeErrorResult(toolName, "unknown_tool", fmt.Sprintf("Unknown tool: %s", toolName), nil), true
 	}
 
 	if err != nil {
-		return makeErrorResult(err.Error()), true
+		return makeErrorResult(toolName, "tool_error", err.Error(), nil), true
 	}
 
-	return makeSuccessResult(result), false
+	return makeSuccessResult(toolName, result), false
 }
 
-func makeErrorResult(message string) callToolResult {
+func makeErrorResult(toolName, code, message string, details interface{}) callToolResult {
+	payload := map[string]interface{}{
+		"success":     false,
+		"tool":        toolName,
+		"error":       map[string]interface{}{"code": code, "message": message},
+		"generatedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+	if details != nil {
+		payload["error"].(map[string]interface{})["details"] = details
+	}
+
 	return callToolResult{
 		Content: []contentItem{
 			{Type: "text", Text: message},
+		},
+		StructuredContent: payload,
+		Meta: map[string]interface{}{
+			"tool":          toolName,
+			"schemaVersion": "2026-04-18",
 		},
 		IsError: true,
 	}
 }
 
-func makeSuccessResult(data interface{}) callToolResult {
-	jsonBytes, _ := json.Marshal(data)
+func makeSuccessResult(toolName string, data interface{}) callToolResult {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return makeErrorResult(toolName, "marshal_error", "Failed to serialize tool result", err.Error())
+	}
+
 	return callToolResult{
 		Content: []contentItem{
 			{Type: "text", Text: string(jsonBytes)},
+		},
+		StructuredContent: data,
+		Meta: map[string]interface{}{
+			"tool":          toolName,
+			"schemaVersion": "2026-04-18",
+			"generatedAt":   time.Now().UTC().Format(time.RFC3339),
 		},
 		IsError: false,
 	}

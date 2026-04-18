@@ -32,8 +32,10 @@ type toolsListResult struct {
 }
 
 type callToolResult struct {
-	Content []contentItem `json:"content"`
-	IsError bool          `json:"isError,omitempty"`
+	Content           []contentItem          `json:"content"`
+	StructuredContent interface{}            `json:"structuredContent,omitempty"`
+	Meta              map[string]interface{} `json:"_meta,omitempty"`
+	IsError           bool                   `json:"isError,omitempty"`
 }
 
 type contentItem struct {
