@@ -150,10 +150,52 @@ func TestFetchBatchFailFastStopsAfterFirstFailure(t *testing.T) {
 	if result.Count != 2 {
 		t.Fatalf("expected fail-fast to stop after second item, got count=%d", result.Count)
 	}
-	if result.Success {
-		t.Fatalf("expected batch success=false after failure")
+	if !result.Success {
+		t.Fatalf("expected batch envelope success=true")
+	}
+	if result.SuccessCount != 1 || result.FailureCount != 1 {
+		t.Fatalf("unexpected success/failure counts: %+v", result)
 	}
 	if result.Results[1].Success {
 		t.Fatalf("expected second result to be failure, got %+v", result.Results[1])
+	}
+}
+
+func TestFetchBatchPreservesDuplicateURLs(t *testing.T) {
+	previousFactory := byparrClientFactory
+	byparrClientFactory = func(cfg config.Config) byparrFetcher {
+		okResponse := byparr.Response{Status: "ok"}
+		okResponse.Solution.Response = `<html><body><article><p>ok</p></article></body></html>`
+		return fakeByparrClient{
+			responses: map[string]byparr.Response{
+				"https://example.com/dup": okResponse,
+			},
+		}
+	}
+	t.Cleanup(func() { byparrClientFactory = previousFactory })
+
+	cfg := config.Config{LogLevel: "ERROR", MCPTimeout: 5, MaxConcurrentRequests: 5}
+	resultRaw, err := Fetch(cfg, map[string]interface{}{
+		"urls": []interface{}{
+			"https://example.com/dup",
+			"https://example.com/dup",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	result := resultRaw.(BatchFetchResponse)
+	if !result.Success {
+		t.Fatalf("expected batch envelope success=true")
+	}
+	if result.Count != 2 || len(result.Results) != 2 {
+		t.Fatalf("expected duplicate URLs to preserve cardinality, got %+v", result)
+	}
+	if result.SuccessCount != 2 || result.FailureCount != 0 {
+		t.Fatalf("unexpected success/failure counts: %+v", result)
+	}
+	if result.Results[0].URL != "https://example.com/dup" || result.Results[1].URL != "https://example.com/dup" {
+		t.Fatalf("expected duplicate results to preserve order, got %+v", result.Results)
 	}
 }

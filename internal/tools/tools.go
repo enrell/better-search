@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -56,9 +55,11 @@ type Metadata struct {
 }
 
 type BatchFetchResponse struct {
-	Success bool          `json:"success"`
-	Count   int           `json:"count"`
-	Results []FetchResult `json:"results"`
+	Success      bool          `json:"success"`
+	Count        int           `json:"count"`
+	SuccessCount int           `json:"success_count,omitempty"`
+	FailureCount int           `json:"failure_count,omitempty"`
+	Results      []FetchResult `json:"results"`
 }
 
 type FetchOptions struct {
@@ -215,9 +216,6 @@ func normalizeURLBatch(urlsRaw []interface{}) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("'urls[%d]' is invalid: %w", idx, err)
 		}
-		if slices.Contains(urls, normalizedURL) {
-			continue
-		}
 		urls = append(urls, normalizedURL)
 	}
 
@@ -294,17 +292,23 @@ func fetchBatch(cfg config.Config, urls []string, options FetchOptions) BatchFet
 
 	if options.FailFast {
 		results := make([]FetchResult, 0, len(urls))
+		successCount := 0
 		for _, rawURL := range urls {
 			result := fetchSingleResult(cfg, rawURL, options)
 			results = append(results, result)
+			if result.Success {
+				successCount++
+			}
 			if !result.Success {
 				break
 			}
 		}
 		return BatchFetchResponse{
-			Success: len(results) == len(urls),
-			Count:   len(results),
-			Results: results,
+			Success:      true,
+			Count:        len(results),
+			SuccessCount: successCount,
+			FailureCount: len(results) - successCount,
+			Results:      results,
 		}
 	}
 
@@ -324,18 +328,19 @@ func fetchBatch(cfg config.Config, urls []string, options FetchOptions) BatchFet
 
 	wg.Wait()
 
-	allSuccessful := true
+	successCount := 0
 	for _, result := range results {
-		if !result.Success {
-			allSuccessful = false
-			break
+		if result.Success {
+			successCount++
 		}
 	}
 
 	return BatchFetchResponse{
-		Success: allSuccessful,
-		Count:   len(results),
-		Results: results,
+		Success:      true,
+		Count:        len(results),
+		SuccessCount: successCount,
+		FailureCount: len(results) - successCount,
+		Results:      results,
 	}
 }
 
